@@ -58,12 +58,13 @@ namespace PlanUp.Commands
                     new CheckResult
                     {
                         RuleId = "OGUC-2.6.3-altura",
-                        ArticleReference = "Art. 2.6.3",
+                        ArticleReference = "Art. 1.1.2 / PRC",
                         RuleName = "Altura maxima de edificacion",
                         MeasuredValue = 12.5,
                         AllowedValue = 15.0,
                         Unit = "m",
                         Status = ComplianceStatus.Green,
+                        SourceUrl = "https://modulor.cl/oguc-disposiciones-generales-normas-de-competencia-definiciones-y-plazos/",
                         StatusMessage = "Building height (12.5 m) is within the allowed maximum (15.0 m)",
                         DetailDescription = "Measured from natural ground level to the highest point of the building. Limit set by Plan Regulador Comunal zone Z-3."
                     },
@@ -72,12 +73,13 @@ namespace PlanUp.Commands
                     new CheckResult
                     {
                         RuleId = "OGUC-2.6.3-distanciamiento",
-                        ArticleReference = "Art. 2.6.3",
+                        ArticleReference = "Art. 2.6.3 / 2.6.4",
                         RuleName = "Distanciamiento a deslinde norte",
                         MeasuredValue = 2.1,
                         AllowedValue = 2.0,
                         Unit = "m",
                         Status = ComplianceStatus.Yellow,
+                        SourceUrl = "https://www.bcn.cl/leychile/Navegar?idNorma=8201&idParte=100008867",
                         StatusMessage = "Setback distance (2.1 m) complies but is close to the minimum (2.0 m). Verify tolerances.",
                         DetailDescription = "Facade without openings. Distance measured from exterior wall face to nearest property boundary."
 
@@ -93,6 +95,7 @@ namespace PlanUp.Commands
                         AllowedValue = 70.0,
                         Unit = "\u00B0",  // degree symbol
                         Status = ComplianceStatus.Red,
+                        SourceUrl = "https://www.bcn.cl/leychile/Navegar?idNorma=8201&idParte=100008867",
                         StatusMessage = "Building volume exceeds the rasante envelope on the east property boundary. Volumetric modification required.",
                         DetailDescription = "Rasante is measured from the property boundary line at a 70 degree angle. The building volume intersects the rasante plane at level 4."
                     }

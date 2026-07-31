@@ -83,6 +83,12 @@ namespace PlanUp.Engine
         public string DetailDescription { get; set; } = "";
 
         /// <summary>
+        /// URL to the source regulation text online.
+        /// Clicking the article reference in the panel opens this URL.
+        /// </summary>
+        public string SourceUrl { get; set; } = "";
+
+        /// <summary>
         /// Returns a formatted string showing measured vs allowed.
         /// Used in the UI to display "12.5 m / 15.0 m"
         /// </summary>

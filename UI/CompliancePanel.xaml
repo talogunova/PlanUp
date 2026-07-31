@@ -17,11 +17,14 @@
         <!-- HEADER SECTION -->
         <StackPanel Grid.Row="0" Background="#2C3E50" Margin="0,0,0,0">
 
-            <TextBlock Text="PlanUp"
-                       Foreground="White"
-                       FontSize="18"
-                       FontWeight="Bold"
-                       Margin="12,10,12,2"/>
+            <Image Height="40"
+                   HorizontalAlignment="Left"
+                   Margin="12,10,12,4"
+                   RenderOptions.BitmapScalingMode="HighQuality">
+                <Image.Source>
+                    <BitmapImage UriSource="pack://application:,,,/PlanUp;component/Resources/PlanUp_logo_white_transparent.png"/>
+                </Image.Source>
+            </Image>
 
             <TextBlock Text="Building Code Compliance Check"
                        Foreground="#95A5A6"
@@ -102,10 +105,15 @@
                                                    Foreground="#2C3E50"
                                                    TextWrapping="Wrap"/>
 
-                                        <TextBlock Text="{Binding ArticleReference}"
-                                                   FontSize="11"
-                                                   Foreground="#7F8C8D"
-                                                   Margin="0,1,0,4"/>
+                                        <TextBlock FontSize="11"
+                                                   Margin="0,1,0,4">
+                                            <Hyperlink NavigateUri="{Binding SourceUrl}"
+                                                       RequestNavigate="Hyperlink_RequestNavigate"
+                                                       Foreground="#5DADE2"
+                                                       TextDecorations="None">
+                                                <Run Text="{Binding ArticleReference, Mode=OneWay}"/>
+                                            </Hyperlink>
+                                        </TextBlock>
 
                                         <Grid Margin="0,2,0,0">
                                             <Grid.ColumnDefinitions>

@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Navigation;
 using Autodesk.Revit.UI;
 using PlanUp.Engine;
 
@@ -111,6 +113,23 @@ namespace PlanUp.UI
             PlaceholderText.Visibility = Visibility.Visible;
             SummaryBar.Visibility = Visibility.Collapsed;
             ResultsList.ItemsSource = null;
+        }
+
+        /// <summary>
+        /// Handles clicking on an article reference hyperlink.
+        /// Opens the source URL in the user's default web browser.
+        /// </summary>
+        private void Hyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)
+        {
+            if (!string.IsNullOrEmpty(e.Uri?.AbsoluteUri))
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = e.Uri.AbsoluteUri,
+                    UseShellExecute = true
+                });
+            }
+            e.Handled = true;
         }
     }
 

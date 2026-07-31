@@ -25,4 +25,8 @@
     </Reference>
   </ItemGroup>
 
+  <ItemGroup>
+    <Resource Include="Resources\PlanUp_logo_white_transparent.png" />
+  </ItemGroup>
+
 </Project>
