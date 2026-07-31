@@ -10,3 +10,10 @@ C:\Users\wowyo\source\repos\PlanUp\obj\Debug\PlanUp.dll
 C:\Users\wowyo\source\repos\PlanUp\obj\Debug\refint\PlanUp.dll
 C:\Users\wowyo\source\repos\PlanUp\obj\Debug\PlanUp.pdb
 C:\Users\wowyo\source\repos\PlanUp\obj\Debug\ref\PlanUp.dll
+C:\Users\wowyo\source\repos\PlanUp\obj\Debug\UI\CompliancePanel.g.cs
+C:\Users\wowyo\source\repos\PlanUp\obj\Debug\GeneratedInternalTypeHelper.g.cs
+C:\Users\wowyo\source\repos\PlanUp\obj\Debug\PlanUp_MarkupCompile.cache
+C:\Users\wowyo\source\repos\PlanUp\obj\Debug\PlanUp_MarkupCompile.lref
+C:\Users\wowyo\source\repos\PlanUp\obj\Debug\UI\CompliancePanel.baml
+C:\Users\wowyo\source\repos\PlanUp\obj\Debug\PlanUp.g.resources
+C:\Users\wowyo\source\repos\PlanUp\obj\Debug\PlanUp.sourcelink.json

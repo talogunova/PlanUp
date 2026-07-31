@@ -1,0 +1,170 @@
+<UserControl x:Class="PlanUp.UI.CompliancePanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:PlanUp.UI"
+             Background="#FAFAFA">
+
+    <UserControl.Resources>
+        <local:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- HEADER SECTION -->
+        <StackPanel Grid.Row="0" Background="#2C3E50" Margin="0,0,0,0">
+
+            <TextBlock Text="PlanUp"
+                       Foreground="White"
+                       FontSize="18"
+                       FontWeight="Bold"
+                       Margin="12,10,12,2"/>
+
+            <TextBlock Text="Building Code Compliance Check"
+                       Foreground="#95A5A6"
+                       FontSize="11"
+                       Margin="12,0,12,8"/>
+
+            <!-- Summary bar: shows count of results by status -->
+            <Border x:Name="SummaryBar"
+                    Background="#34495E"
+                    Padding="12,6"
+                    Visibility="Collapsed">
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse Width="10" Height="10" Fill="#27AE60" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="GreenCount" Text="0" Foreground="White" FontSize="12" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                    <Ellipse Width="10" Height="10" Fill="#F39C12" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="YellowCount" Text="0" Foreground="White" FontSize="12" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                    <Ellipse Width="10" Height="10" Fill="#E74C3C" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="RedCount" Text="0" Foreground="White" FontSize="12" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+
+        <!-- RESULTS LIST SECTION -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+
+            <StackPanel>
+                <TextBlock x:Name="PlaceholderText"
+                           Text="Press 'Run Check' to verify the model"
+                           Foreground="#95A5A6"
+                           FontSize="12"
+                           FontStyle="Italic"
+                           Margin="12,20,12,0"
+                           TextWrapping="Wrap"
+                           HorizontalAlignment="Center"/>
+
+                <ItemsControl x:Name="ResultsList" Margin="8,8,8,8">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border BorderBrush="#E0E0E0"
+                                    BorderThickness="0,0,0,1"
+                                    Padding="8,10"
+                                    Margin="0,0,0,2"
+                                    Background="White">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="28"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Traffic light circle -->
+                                    <Ellipse Grid.Column="0"
+                                             Width="16" Height="16"
+                                             VerticalAlignment="Top"
+                                             Margin="0,2,0,0">
+                                        <Ellipse.Style>
+                                            <Style TargetType="Ellipse">
+                                                <Setter Property="Fill" Value="#95A5A6"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Status}" Value="Green">
+                                                        <Setter Property="Fill" Value="#27AE60"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Status}" Value="Yellow">
+                                                        <Setter Property="Fill" Value="#F39C12"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Status}" Value="Red">
+                                                        <Setter Property="Fill" Value="#E74C3C"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Ellipse.Style>
+                                    </Ellipse>
+
+                                    <!-- Text content -->
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="{Binding RuleName}"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="#2C3E50"
+                                                   TextWrapping="Wrap"/>
+
+                                        <TextBlock Text="{Binding ArticleReference}"
+                                                   FontSize="11"
+                                                   Foreground="#7F8C8D"
+                                                   Margin="0,1,0,4"/>
+
+                                        <Grid Margin="0,2,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <TextBlock Grid.Column="0"
+                                                       Text="{Binding ValueSummary}"
+                                                       FontSize="12"
+                                                       Foreground="#34495E"/>
+
+                                            <Border Grid.Column="1"
+                                                    CornerRadius="3"
+                                                    Padding="6,2">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="#95A5A6"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Status}" Value="Green">
+                                                                <Setter Property="Background" Value="#27AE60"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Status}" Value="Yellow">
+                                                                <Setter Property="Background" Value="#F39C12"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Status}" Value="Red">
+                                                                <Setter Property="Background" Value="#E74C3C"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <TextBlock Text="{Binding StatusLabel}"
+                                                           FontSize="10"
+                                                           FontWeight="Bold"
+                                                           Foreground="White"/>
+                                            </Border>
+                                        </Grid>
+
+                                        <TextBlock Text="{Binding StatusMessage}"
+                                                   FontSize="11"
+                                                   Foreground="#7F8C8D"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,4,0,0"/>
+
+                                        <TextBlock Text="{Binding DetailDescription}"
+                                                   FontSize="11"
+                                                   Foreground="#95A5A6"
+                                                   FontStyle="Italic"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,2,0,0"
+                                                   Visibility="{Binding DetailDescription, 
+                                                       Converter={StaticResource StringToVisibilityConverter}}"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>
