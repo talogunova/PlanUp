@@ -1,0 +1,12 @@
+C:\Users\wowyo\AppData\Roaming\Autodesk\Revit\Addins\2025\PlanUp\PlanUp.deps.json
+C:\Users\wowyo\AppData\Roaming\Autodesk\Revit\Addins\2025\PlanUp\PlanUp.dll
+C:\Users\wowyo\AppData\Roaming\Autodesk\Revit\Addins\2025\PlanUp\PlanUp.pdb
+C:\Users\wowyo\source\repos\PlanUp\obj\Debug\PlanUp.csproj.AssemblyReference.cache
+C:\Users\wowyo\source\repos\PlanUp\obj\Debug\PlanUp.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\wowyo\source\repos\PlanUp\obj\Debug\PlanUp.AssemblyInfoInputs.cache
+C:\Users\wowyo\source\repos\PlanUp\obj\Debug\PlanUp.AssemblyInfo.cs
+C:\Users\wowyo\source\repos\PlanUp\obj\Debug\PlanUp.csproj.CoreCompileInputs.cache
+C:\Users\wowyo\source\repos\PlanUp\obj\Debug\PlanUp.dll
+C:\Users\wowyo\source\repos\PlanUp\obj\Debug\refint\PlanUp.dll
+C:\Users\wowyo\source\repos\PlanUp\obj\Debug\PlanUp.pdb
+C:\Users\wowyo\source\repos\PlanUp\obj\Debug\ref\PlanUp.dll
