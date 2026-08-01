@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("PlanUp")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+5d5c2a465b722fdb5616c8c0098a2576c5a35e42")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+2b3271f821c200dfdae1ae055925260f161b33ee")]
 [assembly: System.Reflection.AssemblyProductAttribute("PlanUp")]
 [assembly: System.Reflection.AssemblyTitleAttribute("PlanUp")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -283,13 +283,7 @@ namespace PlanUp.Engine
                         break;
 
                     case "envelope_intersection":
-                        // Step 6: will use real geometry
-                        result = CreateDummyResult(rule, ComplianceStatus.Red,
-                            72.0, 70.0, "\u00B0",
-                            rule.messages.red
-                                .Replace("{boundary_name}", "east boundary")
-                                .Replace("{distance}", "0.8")
-                                .Replace("{level}", "4"));
+                        result = RunRasanteCheck(rule, doc);
                         break;
 
                     default:
@@ -591,6 +585,112 @@ namespace PlanUp.Engine
                 .Replace("{measured}", measured.ToString("F1"))
                 .Replace("{limit}", limit.ToString("F1"))
                 .Replace("{boundary_name}", boundaryName);
+        }
+
+        /// <summary>
+        /// Runs the rasante check: samples high points of the building and
+        /// checks if any exceed the inclined plane from property boundaries.
+        /// </summary>
+        private CheckResult RunRasanteCheck(RuleDefinition rule, Document doc)
+        {
+            // Get parameters from the rule
+            double angleDegrees = 70.0;
+            double baseHeightM = 0.0;
+
+            string angleParam = rule.evaluation.angle_param;
+            string baseParam = rule.evaluation.base_height_param;
+
+            if (!string.IsNullOrEmpty(angleParam) && rule.parameters.ContainsKey(angleParam))
+            {
+                double? val = rule.parameters[angleParam].value;
+                if (val != null) angleDegrees = val.Value;
+            }
+
+            if (!string.IsNullOrEmpty(baseParam) && rule.parameters.ContainsKey(baseParam))
+            {
+                double? val = rule.parameters[baseParam].value;
+                if (val != null) baseHeightM = val.Value;
+            }
+
+            // Run the extractor
+            RasanteResult rasanteResult = RasanteExtractor.Extract(doc, angleDegrees, baseHeightM);
+
+            if (!rasanteResult.IsValid)
+            {
+                return new CheckResult
+                {
+                    RuleId = rule.rule_id,
+                    ArticleReference = rule.article,
+                    RuleName = rule.name,
+                    SourceUrl = rule.source_url,
+                    Status = ComplianceStatus.Yellow,
+                    StatusMessage = rasanteResult.ErrorMessage,
+                    DetailDescription = rule.description
+                };
+            }
+
+            string detailLines = $"{rule.description}\n\nChecked {rasanteResult.TotalPointsChecked} points against {rasanteResult.PropertyBoundarySegments} boundary segments at {angleDegrees}\u00B0.";
+
+            if (!rasanteResult.HasViolations)
+            {
+                // All clear
+                return new CheckResult
+                {
+                    RuleId = rule.rule_id,
+                    ArticleReference = rule.article,
+                    RuleName = rule.name,
+                    MeasuredValue = angleDegrees,
+                    AllowedValue = angleDegrees,
+                    Unit = "\u00B0",
+                    Status = ComplianceStatus.Green,
+                    SourceUrl = rule.source_url,
+                    StatusMessage = rule.messages.green,
+                    DetailDescription = detailLines
+                };
+            }
+
+            // There are violations. Report the worst one.
+            RasanteViolation worst = rasanteResult.GetWorstViolation();
+
+            detailLines += $"\n\n{rasanteResult.Violations.Count} violation(s) found.";
+            detailLines += $"\nWorst: {worst.ElementName} exceeds rasante by {worst.ExcessM:F2} m";
+            detailLines += $" at {worst.DistanceToBoundaryM:F1} m from {worst.BoundaryName}.";
+            detailLines += $"\nPoint height: {worst.PointHeightM:F1} m, max allowed: {worst.MaxAllowedHeightM:F1} m.";
+
+            // Determine if it is a warning (close) or a fail
+            ComplianceStatus status = worst.ExcessM > 0.5
+                ? ComplianceStatus.Red
+                : ComplianceStatus.Yellow;
+
+            string statusMessage;
+            if (status == ComplianceStatus.Red)
+            {
+                statusMessage = rule.messages.red
+                    .Replace("{boundary_name}", worst.BoundaryName)
+                    .Replace("{distance}", worst.ExcessM.ToString("F1"))
+                    .Replace("{level}", $"{worst.PointHeightM:F1} m");
+            }
+            else
+            {
+                statusMessage = rule.messages.yellow
+                    .Replace("{boundary_name}", worst.BoundaryName)
+                    .Replace("{distance}", worst.ExcessM.ToString("F2"))
+                    .Replace("{level}", $"{worst.PointHeightM:F1} m");
+            }
+
+            return new CheckResult
+            {
+                RuleId = rule.rule_id,
+                ArticleReference = rule.article,
+                RuleName = rule.name,
+                MeasuredValue = worst.PointHeightM,
+                AllowedValue = worst.MaxAllowedHeightM,
+                Unit = "m",
+                Status = status,
+                SourceUrl = rule.source_url,
+                StatusMessage = statusMessage,
+                DetailDescription = detailLines
+            };
         }
     }
 }
