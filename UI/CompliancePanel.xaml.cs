@@ -88,20 +88,20 @@ namespace PlanUp.UI
         /// </summary>
         public void LoadResults(List<CheckResult> results)
         {
-            // Hide the placeholder message
             PlaceholderText.Visibility = Visibility.Collapsed;
 
-            // Show the summary bar and update counts
-            SummaryBar.Visibility = Visibility.Visible;
-            GreenCount.Text = results.Count(r => r.Status == ComplianceStatus.Green).ToString();
-            YellowCount.Text = results.Count(r => r.Status == ComplianceStatus.Yellow).ToString();
-            RedCount.Text = results.Count(r => r.Status == ComplianceStatus.Red).ToString();
+            // Sort: red first, then yellow, then green
+            var sorted = results
+                .OrderByDescending(r => r.Status == ComplianceStatus.Red ? 2 :
+                    r.Status == ComplianceStatus.Yellow ? 1 : 0)
+                .ToList();
 
-            // Bind the results to the list.
-            // ItemsSource is the WPF property that connects a collection of data
-            // to a repeating visual template. Think of it as a foreach loop that
-            // creates UI elements instead of console output.
-            ResultsList.ItemsSource = results;
+            SummaryBar.Visibility = Visibility.Visible;
+            GreenCount.Text = sorted.Count(r => r.Status == ComplianceStatus.Green).ToString();
+            YellowCount.Text = sorted.Count(r => r.Status == ComplianceStatus.Yellow).ToString();
+            RedCount.Text = sorted.Count(r => r.Status == ComplianceStatus.Red).ToString();
+
+            ResultsList.ItemsSource = sorted;
         }
 
         /// <summary>

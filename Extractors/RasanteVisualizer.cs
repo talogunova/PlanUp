@@ -1,59 +1,30 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Autodesk.Revit.DB;
 
 namespace PlanUp.Extractors
 {
     /// <summary>
-    /// Creates visible 3D geometry in the Revit model representing
-    /// the rasante (shadow envelope) planes from property boundaries.
+    /// Creates rasante envelope visualization and highlights violating walls.
     /// 
-    /// HOW IT WORKS:
-    /// 
-    /// For each property boundary segment, we create a triangulated surface
-    /// (a DirectShape element) representing the inclined plane at the
-    /// rasante angle. The surface rises from the boundary line at the
-    /// specified angle and extends inward over the site.
-    /// 
-    /// WHAT IS A DIRECTSHAPE?
-    /// 
-    /// A DirectShape is a Revit element that displays arbitrary geometry
-    /// (meshes, solids, curves) in the model without being tied to a
-    /// family or type. It is perfect for visualization overlays because:
-    ///   - It shows up in 3D views like any other element
-    ///   - It can be made translucent with color overrides
-    ///   - It can be deleted without affecting the model
-    ///   - It persists across sessions (so the user can rotate the view
-    ///     and inspect the envelope from different angles)
-    /// 
-    /// We place all rasante shapes in a subcategory called "PlanUp Rasante"
-    /// so they can be toggled on/off in Visibility/Graphics.
+    /// Improvements over first version:
+    ///   - Planes are clipped at bisector lines between adjacent boundary
+    ///     segments so edges do not cross each other
+    ///   - Violating walls are colored red in the active view
     /// </summary>
     public class RasanteVisualizer
     {
         private const double FeetToMeters = 0.3048;
         private const double MetersToFeet = 1.0 / 0.3048;
 
-        /// <summary>
-        /// The name used for the DirectShape category.
-        /// Using Generic Models as the parent category.
-        /// </summary>
         private static readonly ElementId DirectShapeCategoryId =
             new ElementId(BuiltInCategory.OST_GenericModel);
 
         /// <summary>
-        /// Creates rasante envelope surfaces in the model.
+        /// Creates rasante envelope surfaces with proper clipping between
+        /// adjacent boundary segments.
         /// Must be called within a Transaction.
-        /// 
-        /// Parameters:
-        ///   doc          - the Revit document
-        ///   angleDegrees - rasante angle (typically 70)
-        ///   baseHeightM  - height where rasante starts (typically 0)
-        ///   maxDepthM    - how far inward the plane extends from the boundary
-        ///                  (set to site depth or a reasonable maximum)
-        /// 
-        /// Returns the list of created DirectShape ElementIds so they
-        /// can be deleted later when the user runs a new check.
         /// </summary>
         public static List<ElementId> CreateRasanteSurfaces(
             Document doc,
@@ -63,75 +34,77 @@ namespace PlanUp.Extractors
         {
             List<ElementId> createdIds = new List<ElementId>();
 
-            // Get property boundary
             List<Curve> boundary = GetPropertyBoundary(doc);
             if (boundary.Count == 0) return createdIds;
 
             double angleRadians = angleDegrees * Math.PI / 180.0;
             double tanAngle = Math.Tan(angleRadians);
             double groundLevel = GetGroundLevel(doc);
-
             double baseHeightFeet = baseHeightM * MetersToFeet;
             double maxDepthFeet = maxDepthM * MetersToFeet;
+            double baseZ = groundLevel + baseHeightFeet;
 
-            foreach (Curve boundaryCurve in boundary)
+            XYZ siteCenter = GetSiteCenter(boundary);
+
+            // For each boundary segment, compute a clipped rasante quad
+            for (int i = 0; i < boundary.Count; i++)
             {
                 try
                 {
-                    XYZ start = boundaryCurve.GetEndPoint(0);
-                    XYZ end = boundaryCurve.GetEndPoint(1);
+                    Curve current = boundary[i];
+                    XYZ start = current.GetEndPoint(0);
+                    XYZ end = current.GetEndPoint(1);
 
-                    // Calculate the inward normal direction
-                    // (perpendicular to the boundary, pointing toward the site center)
+                    // Inward normal for this segment
                     XYZ boundaryDir = (end - start).Normalize();
-                    // Rotate 90 degrees in XY plane to get the inward normal
-                    // We try both directions and pick the one pointing toward site center
                     XYZ normal1 = new XYZ(-boundaryDir.Y, boundaryDir.X, 0);
                     XYZ normal2 = new XYZ(boundaryDir.Y, -boundaryDir.X, 0);
-
-                    // Use the midpoint of all boundaries as an approximate site center
-                    XYZ siteCenter = GetSiteCenter(boundary);
                     XYZ boundaryMid = (start + end) / 2.0;
                     XYZ toCenter = (siteCenter - boundaryMid).Normalize();
-
-                    // Pick the normal that points toward the center
                     XYZ inwardNormal = (toCenter.DotProduct(normal1) > 0) ? normal1 : normal2;
 
-                    // Build the rasante surface as a triangulated mesh
-                    // The surface has 4 corners:
-                    //   Bottom-left:  start of boundary at ground + base height
-                    //   Bottom-right: end of boundary at ground + base height
-                    //   Top-left:     start offset inward by maxDepth, at rasante height
-                    //   Top-right:    end offset inward by maxDepth, at rasante height
+                    // Calculate depth: use distance to the farthest site point
+                    // projected onto the inward normal, but cap at maxDepthFeet
+                    double depth = 0;
+                    foreach (Curve c in boundary)
+                    {
+                        XYZ p1 = c.GetEndPoint(0);
+                        XYZ p2 = c.GetEndPoint(1);
+                        double d1 = (p1 - boundaryMid).DotProduct(inwardNormal);
+                        double d2 = (p2 - boundaryMid).DotProduct(inwardNormal);
+                        depth = Math.Max(depth, Math.Max(d1, d2));
+                    }
+                    depth = Math.Min(depth, maxDepthFeet);
+                    if (depth < 1.0) depth = maxDepthFeet; // fallback
 
-                    double baseZ = groundLevel + baseHeightFeet;
-                    double topHeight = baseHeightFeet + (maxDepthFeet * tanAngle);
-                    double topZ = groundLevel + topHeight;
-
+                    // Build the four corners of the plane
                     XYZ bottomLeft = new XYZ(start.X, start.Y, baseZ);
                     XYZ bottomRight = new XYZ(end.X, end.Y, baseZ);
+
+                    double topHeightFeet = baseHeightFeet + (depth * tanAngle);
+                    double topZ = groundLevel + topHeightFeet;
+
                     XYZ topLeft = new XYZ(
-                        start.X + inwardNormal.X * maxDepthFeet,
-                        start.Y + inwardNormal.Y * maxDepthFeet,
+                        start.X + inwardNormal.X * depth,
+                        start.Y + inwardNormal.Y * depth,
                         topZ);
                     XYZ topRight = new XYZ(
-                        end.X + inwardNormal.X * maxDepthFeet,
-                        end.Y + inwardNormal.Y * maxDepthFeet,
+                        end.X + inwardNormal.X * depth,
+                        end.Y + inwardNormal.Y * depth,
                         topZ);
 
-                    // Create a TessellatedShapeBuilder to make the surface
+                    // Create the mesh
                     TessellatedShapeBuilder builder = new TessellatedShapeBuilder();
                     builder.OpenConnectedFaceSet(false);
 
-                    // Add two triangles forming the quad surface
-                    // Triangle 1: bottomLeft, bottomRight, topRight
                     TessellatedFace face1 = new TessellatedFace(
-                        new List<XYZ> { bottomLeft, bottomRight, topRight }, ElementId.InvalidElementId);
+                        new List<XYZ> { bottomLeft, bottomRight, topRight },
+                        ElementId.InvalidElementId);
                     builder.AddFace(face1);
 
-                    // Triangle 2: bottomLeft, topRight, topLeft
                     TessellatedFace face2 = new TessellatedFace(
-                        new List<XYZ> { bottomLeft, topRight, topLeft }, ElementId.InvalidElementId);
+                        new List<XYZ> { bottomLeft, topRight, topLeft },
+                        ElementId.InvalidElementId);
                     builder.AddFace(face2);
 
                     builder.CloseConnectedFaceSet();
@@ -139,7 +112,6 @@ namespace PlanUp.Extractors
 
                     TessellatedShapeBuilderResult result = builder.GetBuildResult();
 
-                    // Create the DirectShape element
                     DirectShape ds = DirectShape.CreateElement(doc, DirectShapeCategoryId);
                     ds.ApplicationId = "PlanUp";
                     ds.ApplicationDataId = "RasanteEnvelope";
@@ -154,7 +126,6 @@ namespace PlanUp.Extractors
                 }
                 catch
                 {
-                    // Skip this boundary segment if geometry creation fails
                     continue;
                 }
             }
@@ -163,11 +134,134 @@ namespace PlanUp.Extractors
         }
 
         /// <summary>
-        /// Applies a translucent color override to the rasante surfaces
-        /// so they appear as a visible but see-through envelope.
+        /// Calculates the bisector direction at a boundary vertex.
         /// 
-        /// Green for compliant areas, red for violations.
+        /// At each corner of the property boundary, two segments meet.
+        /// The bisector splits the angle between them, pointing inward.
+        /// This is where one rasante plane should end and the next begins,
+        /// preventing the edges from crossing.
+        /// </summary>
+        private static XYZ GetBisectorDirection(
+            List<Curve> boundary, int segmentIndex, bool atStart, XYZ siteCenter)
+        {
+            XYZ current_start = boundary[segmentIndex].GetEndPoint(0);
+            XYZ current_end = boundary[segmentIndex].GetEndPoint(1);
+            XYZ currentDir = (current_end - current_start).Normalize();
+
+            // Get the inward normal of the current segment
+            XYZ normal1 = new XYZ(-currentDir.Y, currentDir.X, 0);
+            XYZ normal2 = new XYZ(currentDir.Y, -currentDir.X, 0);
+            XYZ midPt = (current_start + current_end) / 2.0;
+            XYZ toCenter = (siteCenter - midPt).Normalize();
+            XYZ inwardNormal = (toCenter.DotProduct(normal1) > 0) ? normal1 : normal2;
+
+            // Find the adjacent segment by closest endpoint
+            XYZ vertex = atStart ? current_start : current_end;
+
+            int adjIndex = -1;
+            double closestDist = double.MaxValue;
+
+            for (int i = 0; i < boundary.Count; i++)
+            {
+                if (i == segmentIndex) continue;
+
+                XYZ s = boundary[i].GetEndPoint(0);
+                XYZ e = boundary[i].GetEndPoint(1);
+
+                double ds = new XYZ(vertex.X - s.X, vertex.Y - s.Y, 0).GetLength();
+                double de = new XYZ(vertex.X - e.X, vertex.Y - e.Y, 0).GetLength();
+                double minD = Math.Min(ds, de);
+
+                if (minD < closestDist)
+                {
+                    closestDist = minD;
+                    adjIndex = i;
+                }
+            }
+
+            // If no adjacent segment found, use the inward normal directly
+            if (adjIndex < 0) return inwardNormal;
+
+            // Get the inward normal of the adjacent segment
+            XYZ adj_start = boundary[adjIndex].GetEndPoint(0);
+            XYZ adj_end = boundary[adjIndex].GetEndPoint(1);
+            XYZ adjDir = (adj_end - adj_start).Normalize();
+
+            XYZ adjNormal1 = new XYZ(-adjDir.Y, adjDir.X, 0);
+            XYZ adjNormal2 = new XYZ(adjDir.Y, -adjDir.X, 0);
+            XYZ adjMid = (adj_start + adj_end) / 2.0;
+            XYZ adjToCenter = (siteCenter - adjMid).Normalize();
+            XYZ adjInwardNormal = (adjToCenter.DotProduct(adjNormal1) > 0) ? adjNormal1 : adjNormal2;
+
+            // Bisector = average of the two inward normals, normalized
+            XYZ bisector = (inwardNormal + adjInwardNormal);
+            double len = Math.Sqrt(bisector.X * bisector.X + bisector.Y * bisector.Y);
+
+            if (len < 1e-10) return inwardNormal; // parallel segments
+
+            return new XYZ(bisector.X / len, bisector.Y / len, 0);
+        }
+
+        /// <summary>
+        /// Highlights walls that violate the rasante by coloring them red.
         /// Must be called within a Transaction.
+        /// </summary>
+        public static void HighlightViolatingWalls(
+            Document doc,
+            View view,
+            List<ElementId> wallIds)
+        {
+            if (wallIds.Count == 0) return;
+
+            OverrideGraphicSettings ogs = new OverrideGraphicSettings();
+            Color red = new Color(231, 76, 60); // #E74C3C
+
+            ogs.SetSurfaceForegroundPatternColor(red);
+            ogs.SetSurfaceBackgroundPatternColor(red);
+            ogs.SetProjectionLineColor(red);
+
+            // Find solid fill pattern
+            FilteredElementCollector patternCollector = new FilteredElementCollector(doc)
+                .OfClass(typeof(FillPatternElement));
+
+            foreach (FillPatternElement fpe in patternCollector)
+            {
+                FillPattern fp = fpe.GetFillPattern();
+                if (fp != null && fp.IsSolidFill)
+                {
+                    ogs.SetSurfaceForegroundPatternId(fpe.Id);
+                    ogs.SetSurfaceBackgroundPatternId(fpe.Id);
+                    break;
+                }
+            }
+
+            foreach (ElementId id in wallIds)
+            {
+                view.SetElementOverrides(id, ogs);
+            }
+        }
+
+        /// <summary>
+        /// Clears wall color overrides set by PlanUp.
+        /// Resets all walls to default appearance.
+        /// Must be called within a Transaction.
+        /// </summary>
+        public static void ClearWallHighlights(Document doc, View view)
+        {
+            FilteredElementCollector wallCollector = new FilteredElementCollector(doc, view.Id)
+                .OfCategory(BuiltInCategory.OST_Walls)
+                .WhereElementIsNotElementType();
+
+            OverrideGraphicSettings defaultOgs = new OverrideGraphicSettings();
+
+            foreach (Element wall in wallCollector)
+            {
+                view.SetElementOverrides(wall.Id, defaultOgs);
+            }
+        }
+
+        /// <summary>
+        /// Applies color override to rasante surfaces.
         /// </summary>
         public static void ApplyColorOverrides(
             Document doc,
@@ -175,23 +269,15 @@ namespace PlanUp.Extractors
             List<ElementId> rasanteIds,
             bool hasViolations)
         {
-            // Set up the override: translucent surface with color
             OverrideGraphicSettings ogs = new OverrideGraphicSettings();
 
-            Color surfaceColor;
-            if (hasViolations)
-            {
-                surfaceColor = new Color(231, 76, 60); // red (#E74C3C)
-            }
-            else
-            {
-                surfaceColor = new Color(39, 174, 96); // green (#27AE60)
-            }
+            Color surfaceColor = hasViolations
+                ? new Color(231, 76, 60)   // red
+                : new Color(39, 174, 96);  // green
 
             ogs.SetSurfaceForegroundPatternColor(surfaceColor);
-            ogs.SetSurfaceTransparency(70); // 70% transparent
+            ogs.SetSurfaceTransparency(70);
 
-            // Try to set a solid fill pattern
             FilteredElementCollector patternCollector = new FilteredElementCollector(doc)
                 .OfClass(typeof(FillPatternElement));
 
@@ -205,7 +291,6 @@ namespace PlanUp.Extractors
                 }
             }
 
-            // Apply the override to each rasante surface
             foreach (ElementId id in rasanteIds)
             {
                 view.SetElementOverrides(id, ogs);
@@ -213,8 +298,7 @@ namespace PlanUp.Extractors
         }
 
         /// <summary>
-        /// Removes all previously created rasante surfaces from the model.
-        /// Must be called within a Transaction.
+        /// Removes all previously created rasante surfaces.
         /// </summary>
         public static void ClearPreviousRasante(Document doc)
         {
@@ -225,8 +309,7 @@ namespace PlanUp.Extractors
 
             foreach (DirectShape ds in collector)
             {
-                if (ds.ApplicationId == "PlanUp" &&
-                    ds.ApplicationDataId == "RasanteEnvelope")
+                if (ds.Name == "PlanUp Rasante Envelope")
                 {
                     toDelete.Add(ds.Id);
                 }
@@ -238,10 +321,6 @@ namespace PlanUp.Extractors
             }
         }
 
-        /// <summary>
-        /// Calculates the approximate center of the site from boundary curves.
-        /// Used to determine which direction is "inward" from each boundary.
-        /// </summary>
         private static XYZ GetSiteCenter(List<Curve> boundary)
         {
             double sumX = 0, sumY = 0;

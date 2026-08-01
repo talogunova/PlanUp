@@ -27,6 +27,10 @@
 
   <ItemGroup>
     <Resource Include="Resources\PlanUp_logo_white_transparent.png" />
+    <Resource Include="Resources\icon_run_check.png" />
+    <Resource Include="Resources\icon_settings.png" />
+    <Resource Include="Resources\icon_report.png" />
+    <Resource Include="Resources\icon_rules.png" />
   </ItemGroup>
 
   <ItemGroup>

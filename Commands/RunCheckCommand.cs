@@ -75,6 +75,10 @@ namespace PlanUp.Commands
                 List<CheckResult> results = engine.RunChecks(doc);
 
                 // ---- STEP 3: CREATE RASANTE VISUALIZATION ----
+                // Only create visualization in 3D views.
+                // In plan views, the inclined planes look confusing.
+
+                bool is3DView = doc.ActiveView is View3D;
 
                 double rasanteAngle = 70.0;
                 double rasanteBaseHeight = 0.0;
@@ -112,14 +116,45 @@ namespace PlanUp.Commands
                 {
                     visTx.Start();
 
-                    List<ElementId> rasanteIds = RasanteVisualizer.CreateRasanteSurfaces(
-                        doc, rasanteAngle, rasanteBaseHeight);
-
-                    if (rasanteIds.Count > 0)
+                    // Clear previous wall highlights
+                    if (doc.ActiveView is View3D || doc.ActiveView is ViewPlan)
                     {
-                        View activeView = doc.ActiveView;
-                        RasanteVisualizer.ApplyColorOverrides(
-                            doc, activeView, rasanteIds, rasanteHasViolations);
+                        RasanteVisualizer.ClearWallHighlights(doc, doc.ActiveView);
+                    }
+
+                    if (is3DView)
+                    {
+                        // Create rasante surfaces
+                        List<ElementId> rasanteIds = RasanteVisualizer.CreateRasanteSurfaces(
+                            doc, rasanteAngle, rasanteBaseHeight);
+
+                        if (rasanteIds.Count > 0)
+                        {
+                            View activeView = doc.ActiveView;
+                            RasanteVisualizer.ApplyColorOverrides(
+                                doc, activeView, rasanteIds, rasanteHasViolations);
+                        }
+                    }
+
+                    // Highlight violating walls red (works in any view)
+                    CheckResult rasanteCheckResult = results.FirstOrDefault(
+                        r => r.RuleId != null && r.RuleId.Contains("rasante"));
+
+                    if (rasanteCheckResult != null && rasanteCheckResult.Status == ComplianceStatus.Red)
+                    {
+                        // Run the rasante extractor again to get violation ElementIds
+                        RasanteResult rasResult = RasanteExtractor.Extract(doc, rasanteAngle, rasanteBaseHeight);
+                        if (rasResult.IsValid && rasResult.HasViolations)
+                        {
+                            List<ElementId> violatingWallIds = rasResult.Violations
+                                .Select(v => v.ElementId)
+                                .Where(id => id != ElementId.InvalidElementId)
+                                .Distinct()
+                                .ToList();
+
+                            RasanteVisualizer.HighlightViolatingWalls(
+                                doc, doc.ActiveView, violatingWallIds);
+                        }
                     }
 
                     visTx.Commit();
