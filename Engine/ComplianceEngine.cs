@@ -279,13 +279,7 @@ namespace PlanUp.Engine
                         break;
 
                     case "min_threshold_per_face":
-                        // Step 5: will use real geometry
-                        result = CreateDummyResult(rule, ComplianceStatus.Yellow,
-                            2.1, 2.0, rule.evaluation.unit,
-                            rule.messages.yellow
-                                .Replace("{measured}", "2.1")
-                                .Replace("{limit}", "2.0")
-                                .Replace("{boundary_name}", "north boundary"));
+                        result = RunSetbackCheck(rule, doc);
                         break;
 
                     case "envelope_intersection":
@@ -427,6 +421,176 @@ namespace PlanUp.Engine
                 StatusMessage = statusMessage,
                 DetailDescription = rule.description
             };
+        }
+
+        /// <summary>
+        /// Runs the distanciamiento check: measures the distance from each
+        /// wall to the nearest property boundary and compares against the
+        /// minimum required by OGUC.
+        /// 
+        /// This check can produce multiple results if there are violations
+        /// on different walls, but for the panel we report the most critical
+        /// one (the wall closest to a property line).
+        /// </summary>
+        private CheckResult RunSetbackCheck(RuleDefinition rule, Document doc)
+        {
+            // Step 1: Get the limit parameters
+            double? limitConVano = null;
+            double? limitSinVano = null;
+
+            string conVanoParam = rule.evaluation.limit_param_con_vano;
+            string sinVanoParam = rule.evaluation.limit_param_sin_vano;
+
+            if (!string.IsNullOrEmpty(conVanoParam) && rule.parameters.ContainsKey(conVanoParam))
+                limitConVano = rule.parameters[conVanoParam].value;
+
+            if (!string.IsNullOrEmpty(sinVanoParam) && rule.parameters.ContainsKey(sinVanoParam))
+                limitSinVano = rule.parameters[sinVanoParam].value;
+
+            if (limitConVano == null && limitSinVano == null)
+            {
+                return new CheckResult
+                {
+                    RuleId = rule.rule_id,
+                    ArticleReference = rule.article,
+                    RuleName = rule.name,
+                    SourceUrl = rule.source_url,
+                    Status = ComplianceStatus.Yellow,
+                    StatusMessage = "Cannot evaluate: setback parameters are not set.",
+                    DetailDescription = rule.description
+                };
+            }
+
+            // Step 2: Extract geometry
+            SetbackResult setbackResult = SetbackExtractor.Extract(doc);
+
+            if (!setbackResult.IsValid)
+            {
+                return new CheckResult
+                {
+                    RuleId = rule.rule_id,
+                    ArticleReference = rule.article,
+                    RuleName = rule.name,
+                    SourceUrl = rule.source_url,
+                    Status = ComplianceStatus.Yellow,
+                    StatusMessage = setbackResult.ErrorMessage,
+                    DetailDescription = rule.description
+                };
+            }
+
+            // Step 3: Find the most critical wall (smallest setback)
+            // Check con vano and sin vano separately
+            WallSetback criticalConVano = setbackResult.GetCriticalConVano();
+            WallSetback criticalSinVano = setbackResult.GetCriticalSinVano();
+
+            // Determine the overall worst case
+            ComplianceStatus worstStatus = ComplianceStatus.Green;
+            string worstMessage = "";
+            double reportedMeasured = 0;
+            double reportedLimit = 0;
+            string detailLines = $"{rule.description}\n\nAnalyzed {setbackResult.WallSetbacks.Count} walls against {setbackResult.PropertyBoundarySegments} property boundary segments.\n";
+
+            // Check con vano
+            if (criticalConVano != null && limitConVano != null)
+            {
+                double measured = criticalConVano.DistanceToPropertyLine;
+                double limit = limitConVano.Value;
+                ComplianceStatus status = EvaluateSetback(measured, limit);
+
+                detailLines += $"\nCritical wall with openings (con vano): {measured:F1} m to {criticalConVano.NearestBoundaryName} (min: {limit:F1} m)";
+
+                if (status > worstStatus)
+                {
+                    worstStatus = status;
+                    reportedMeasured = measured;
+                    reportedLimit = limit;
+                    worstMessage = GetSetbackMessage(rule, status, measured, limit, criticalConVano.NearestBoundaryName);
+                }
+            }
+
+            // Check sin vano
+            if (criticalSinVano != null && limitSinVano != null)
+            {
+                double measured = criticalSinVano.DistanceToPropertyLine;
+                double limit = limitSinVano.Value;
+                ComplianceStatus status = EvaluateSetback(measured, limit);
+
+                detailLines += $"\nCritical solid wall (sin vano): {measured:F1} m to {criticalSinVano.NearestBoundaryName} (min: {limit:F1} m)";
+
+                if (status > worstStatus)
+                {
+                    worstStatus = status;
+                    reportedMeasured = measured;
+                    reportedLimit = limit;
+                    worstMessage = GetSetbackMessage(rule, status, measured, limit, criticalSinVano.NearestBoundaryName);
+                }
+            }
+
+            // If everything passed and we have no worst message, set green
+            if (worstStatus == ComplianceStatus.Green)
+            {
+                reportedMeasured = criticalConVano != null ? criticalConVano.DistanceToPropertyLine :
+                    (criticalSinVano != null ? criticalSinVano.DistanceToPropertyLine : 0);
+                reportedLimit = limitConVano ?? limitSinVano ?? 0;
+                worstMessage = rule.messages.green
+                    .Replace("{measured}", reportedMeasured.ToString("F1"))
+                    .Replace("{limit}", reportedLimit.ToString("F1"))
+                    .Replace("{boundary_name}", "all boundaries");
+            }
+
+            return new CheckResult
+            {
+                RuleId = rule.rule_id,
+                ArticleReference = rule.article,
+                RuleName = rule.name,
+                MeasuredValue = reportedMeasured,
+                AllowedValue = reportedLimit,
+                Unit = rule.evaluation.unit,
+                Status = worstStatus,
+                SourceUrl = rule.source_url,
+                StatusMessage = worstMessage,
+                DetailDescription = detailLines
+            };
+        }
+
+        /// <summary>
+        /// Evaluates a single setback distance against its limit.
+        /// Uses a 0.5 m buffer for the warning zone.
+        /// </summary>
+        private ComplianceStatus EvaluateSetback(double measured, double limit)
+        {
+            if (measured < limit)
+                return ComplianceStatus.Red;
+            else if (measured < limit + 0.5)
+                return ComplianceStatus.Yellow;
+            else
+                return ComplianceStatus.Green;
+        }
+
+        /// <summary>
+        /// Builds the status message for a setback check result.
+        /// </summary>
+        private string GetSetbackMessage(RuleDefinition rule, ComplianceStatus status,
+            double measured, double limit, string boundaryName)
+        {
+            string template;
+            switch (status)
+            {
+                case ComplianceStatus.Red:
+                    template = rule.messages.red;
+                    break;
+                case ComplianceStatus.Yellow:
+                    template = rule.messages.yellow;
+                    break;
+                default:
+                    template = rule.messages.green;
+                    break;
+            }
+
+            return template
+                .Replace("{measured}", measured.ToString("F1"))
+                .Replace("{limit}", limit.ToString("F1"))
+                .Replace("{boundary_name}", boundaryName);
         }
     }
 }
