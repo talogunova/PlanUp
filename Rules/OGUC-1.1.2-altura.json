@@ -14,9 +14,9 @@
 
     "parameters": {
         "max_height_m": {
-            "value": null,
+            "value": 42.0,
             "source": "Plan Regulador Comunal",
-            "description": "Maximum building height allowed in the project zone, in meters. Must be set by the user based on the applicable PRC zone."
+            "description": "Maximum building height allowed in the project zone, in meters. Must be set by the user based on the applicable PRC zone. Demo value: 42.0 m (Zone EA12, Providencia)."
         }
     },
 

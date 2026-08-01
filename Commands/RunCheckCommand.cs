@@ -13,9 +13,9 @@ namespace PlanUp.Commands
     /// <summary>
     /// The command that runs when the user clicks "Run Check" on the ribbon.
     /// 
-    /// Step 3: Now loads rule definitions from JSON files using ComplianceEngine,
-    /// then shows a summary of what was loaded. Still uses dummy results in the
-    /// panel because real geometry extractors come in Step 4.
+    /// Step 4: Now uses ComplianceEngine.RunChecks to produce real results
+    /// for the altura check (measured from actual model geometry).
+    /// Distanciamiento and rasante still show dummy data until Steps 5 and 6.
     /// </summary>
     [Transaction(TransactionMode.Manual)]
     [Regeneration(RegenerationOption.Manual)]
@@ -41,113 +41,35 @@ namespace PlanUp.Commands
                     pane.Show();
                 }
 
-                // ---- LOAD RULES FROM JSON ----
+                // ---- LOAD RULES AND RUN CHECKS ----
 
                 // Find the Rules folder next to the DLL
                 string assemblyDir = Path.GetDirectoryName(
                     Assembly.GetExecutingAssembly().Location) ?? "";
                 string rulesFolder = Path.Combine(assemblyDir, "Rules");
 
-                // Create the engine, which loads all rule files automatically
+                // Create the engine and load rules
                 ComplianceEngine engine = new ComplianceEngine(rulesFolder);
 
-                // Show what was loaded (temporary, for development)
-                TaskDialog.Show("PlanUp Engine", engine.GetLoadSummary());
-
-                // ---- CREATE DUMMY RESULTS ----
-
-                // Still using dummy results until geometry extractors are built.
-                // But now each dummy result uses metadata from the loaded rules
-                // to ensure consistency between the JSON definitions and the UI.
-
-                List<CheckResult> dummyResults = new List<CheckResult>();
-
-                // Build dummy results from loaded rules
-                foreach (var rule in engine.Rules.Values)
+                // Check if rules loaded successfully
+                if (!engine.IsHealthy)
                 {
-                    CheckResult result;
-
-                    switch (rule.evaluation.type)
-                    {
-                        case "max_threshold":
-                            result = new CheckResult
-                            {
-                                RuleId = rule.rule_id,
-                                ArticleReference = rule.article,
-                                RuleName = rule.name,
-                                MeasuredValue = 12.5,
-                                AllowedValue = 15.0,
-                                Unit = rule.evaluation.unit,
-                                Status = ComplianceStatus.Green,
-                                SourceUrl = rule.source_url,
-                                StatusMessage = rule.messages.green
-                                    .Replace("{measured}", "12.5")
-                                    .Replace("{limit}", "15.0"),
-                                DetailDescription = rule.description
-                            };
-                            break;
-
-                        case "min_threshold_per_face":
-                            result = new CheckResult
-                            {
-                                RuleId = rule.rule_id,
-                                ArticleReference = rule.article,
-                                RuleName = rule.name,
-                                MeasuredValue = 2.1,
-                                AllowedValue = 2.0,
-                                Unit = rule.evaluation.unit,
-                                Status = ComplianceStatus.Yellow,
-                                SourceUrl = rule.source_url,
-                                StatusMessage = rule.messages.yellow
-                                    .Replace("{measured}", "2.1")
-                                    .Replace("{limit}", "2.0")
-                                    .Replace("{boundary_name}", "north boundary"),
-                                DetailDescription = rule.description
-                            };
-                            break;
-
-                        case "envelope_intersection":
-                            result = new CheckResult
-                            {
-                                RuleId = rule.rule_id,
-                                ArticleReference = rule.article,
-                                RuleName = rule.name,
-                                MeasuredValue = 72.0,
-                                AllowedValue = 70.0,
-                                Unit = "\u00B0",
-                                Status = ComplianceStatus.Red,
-                                SourceUrl = rule.source_url,
-                                StatusMessage = rule.messages.red
-                                    .Replace("{boundary_name}", "east boundary")
-                                    .Replace("{distance}", "0.8")
-                                    .Replace("{level}", "4"),
-                                DetailDescription = rule.description
-                            };
-                            break;
-
-                        default:
-                            result = new CheckResult
-                            {
-                                RuleId = rule.rule_id,
-                                ArticleReference = rule.article,
-                                RuleName = rule.name,
-                                Status = ComplianceStatus.Yellow,
-                                SourceUrl = rule.source_url,
-                                StatusMessage = $"Unknown evaluation type: {rule.evaluation.type}",
-                                DetailDescription = rule.description
-                            };
-                            break;
-                    }
-
-                    dummyResults.Add(result);
+                    string errors = string.Join("\n", engine.LoadErrors);
+                    TaskDialog.Show("PlanUp Warning",
+                        $"Some rules could not be loaded:\n\n{errors}");
                 }
+
+                // Run all checks against the current model
+                // The engine uses real geometry for altura and dummy data
+                // for distanciamiento and rasante (Steps 5 and 6)
+                List<CheckResult> results = engine.RunChecks(doc);
 
                 // ---- LOAD RESULTS INTO THE PANEL ----
 
                 CompliancePanel panel = PlanUpApp.CompliancePanelInstance;
                 if (panel != null)
                 {
-                    panel.LoadResults(dummyResults);
+                    panel.LoadResults(results);
                 }
                 else
                 {

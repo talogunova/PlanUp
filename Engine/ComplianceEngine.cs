@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using Autodesk.Revit.DB;
+using PlanUp.Extractors;
 
 namespace PlanUp.Engine
 {
@@ -245,6 +247,186 @@ namespace PlanUp.Engine
             }
 
             return summary;
+        }
+
+        /// <summary>
+        /// Runs all loaded compliance checks against a Revit document.
+        /// 
+        /// This is the main method that connects everything:
+        ///   1. Iterates through each loaded rule
+        ///   2. Based on the evaluation type, calls the right geometry extractor
+        ///   3. Compares the extracted measurements against the rule's thresholds
+        ///   4. Produces a CheckResult for each rule
+        /// 
+        /// For Step 4, only "max_threshold" (altura) uses real geometry.
+        /// Other evaluation types still produce dummy results.
+        /// Steps 5 and 6 will add real extractors for distanciamiento and rasante.
+        /// </summary>
+        /// <param name="doc">The active Revit document to check.</param>
+        /// <returns>A list of CheckResult objects, one per rule.</returns>
+        public List<CheckResult> RunChecks(Document doc)
+        {
+            List<CheckResult> results = new List<CheckResult>();
+
+            foreach (var rule in _rules.Values)
+            {
+                CheckResult result;
+
+                switch (rule.evaluation.type)
+                {
+                    case "max_threshold":
+                        result = RunMaxThresholdCheck(rule, doc);
+                        break;
+
+                    case "min_threshold_per_face":
+                        // Step 5: will use real geometry
+                        result = CreateDummyResult(rule, ComplianceStatus.Yellow,
+                            2.1, 2.0, rule.evaluation.unit,
+                            rule.messages.yellow
+                                .Replace("{measured}", "2.1")
+                                .Replace("{limit}", "2.0")
+                                .Replace("{boundary_name}", "north boundary"));
+                        break;
+
+                    case "envelope_intersection":
+                        // Step 6: will use real geometry
+                        result = CreateDummyResult(rule, ComplianceStatus.Red,
+                            72.0, 70.0, "\u00B0",
+                            rule.messages.red
+                                .Replace("{boundary_name}", "east boundary")
+                                .Replace("{distance}", "0.8")
+                                .Replace("{level}", "4"));
+                        break;
+
+                    default:
+                        result = CreateDummyResult(rule, ComplianceStatus.Yellow,
+                            0, 0, "",
+                            $"Unknown evaluation type: {rule.evaluation.type}");
+                        break;
+                }
+
+                results.Add(result);
+            }
+
+            return results;
+        }
+
+        /// <summary>
+        /// Runs the altura check: extracts the building height from the model
+        /// and compares it against the maximum allowed by the rule.
+        /// 
+        /// This is the first check that uses REAL geometry from the Revit model.
+        /// </summary>
+        private CheckResult RunMaxThresholdCheck(RuleDefinition rule, Document doc)
+        {
+            // Step 1: Get the limit parameter value
+            string limitParamName = rule.evaluation.limit_param;
+            double? limitValue = null;
+
+            if (rule.parameters.ContainsKey(limitParamName))
+            {
+                limitValue = rule.parameters[limitParamName].value;
+            }
+
+            // If the limit is not set, we cannot evaluate
+            if (limitValue == null)
+            {
+                return new CheckResult
+                {
+                    RuleId = rule.rule_id,
+                    ArticleReference = rule.article,
+                    RuleName = rule.name,
+                    SourceUrl = rule.source_url,
+                    Status = ComplianceStatus.Yellow,
+                    StatusMessage = $"Cannot evaluate: parameter '{limitParamName}' is not set. Check the rule definition.",
+                    DetailDescription = rule.description
+                };
+            }
+
+            // Step 2: Extract geometry from the model
+            BuildingHeightResult heightResult = BuildingHeightExtractor.Extract(doc);
+
+            if (!heightResult.IsValid)
+            {
+                return new CheckResult
+                {
+                    RuleId = rule.rule_id,
+                    ArticleReference = rule.article,
+                    RuleName = rule.name,
+                    SourceUrl = rule.source_url,
+                    Status = ComplianceStatus.Yellow,
+                    StatusMessage = $"Could not extract geometry: {heightResult.ErrorMessage}",
+                    DetailDescription = rule.description
+                };
+            }
+
+            // Step 3: Compare measured height against the limit
+            double measured = heightResult.Height;
+            double limit = limitValue.Value;
+            string unit = rule.evaluation.unit;
+
+            ComplianceStatus status;
+            string statusMessage;
+
+            if (measured > limit)
+            {
+                status = ComplianceStatus.Red;
+                statusMessage = rule.messages.red
+                    .Replace("{measured}", measured.ToString("F1"))
+                    .Replace("{limit}", limit.ToString("F1"));
+            }
+            else if (measured > limit - 1.0)
+            {
+                status = ComplianceStatus.Yellow;
+                statusMessage = rule.messages.yellow
+                    .Replace("{measured}", measured.ToString("F1"))
+                    .Replace("{limit}", limit.ToString("F1"));
+            }
+            else
+            {
+                status = ComplianceStatus.Green;
+                statusMessage = rule.messages.green
+                    .Replace("{measured}", measured.ToString("F1"))
+                    .Replace("{limit}", limit.ToString("F1"));
+            }
+
+            return new CheckResult
+            {
+                RuleId = rule.rule_id,
+                ArticleReference = rule.article,
+                RuleName = rule.name,
+                MeasuredValue = measured,
+                AllowedValue = limit,
+                Unit = unit,
+                Status = status,
+                SourceUrl = rule.source_url,
+                StatusMessage = statusMessage,
+                DetailDescription = $"{rule.description}\n\nAnalyzed {heightResult.ElementCount} elements. "
+                    + $"Highest point at {heightResult.MaxElevation} m, ground level at {heightResult.GroundLevel} m."
+            };
+        }
+
+        /// <summary>
+        /// Creates a dummy CheckResult for rules that do not have real
+        /// extractors yet. Will be removed as Steps 5 and 6 are completed.
+        /// </summary>
+        private CheckResult CreateDummyResult(RuleDefinition rule,
+            ComplianceStatus status, double measured, double allowed,
+            string unit, string statusMessage)
+        {
+            return new CheckResult
+            {
+                RuleId = rule.rule_id,
+                ArticleReference = rule.article,
+                RuleName = rule.name,
+                MeasuredValue = measured,
+                AllowedValue = allowed,
+                Unit = unit,
+                Status = status,
+                SourceUrl = rule.source_url,
+                StatusMessage = statusMessage,
+                DetailDescription = rule.description
+            };
         }
     }
 }

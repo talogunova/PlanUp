@@ -15,14 +15,14 @@
 
     "parameters": {
         "min_distance_con_vano_m": {
-            "value": null,
+            "value": 10.5,
             "source": "OGUC Art. 2.6.3 tabla",
-            "description": "Minimum setback distance for facades with openings (con vano), in meters. Depends on building height per OGUC table."
+            "description": "Minimum setback distance for facades with openings (con vano), in meters. Calculated as approximately h/4 for Zone EA12 Providencia (42 m height)."
         },
         "min_distance_sin_vano_m": {
-            "value": null,
+            "value": 5.25,
             "source": "OGUC Art. 2.6.3 tabla",
-            "description": "Minimum setback distance for solid facades without openings (sin vano), in meters. Depends on building height per OGUC table."
+            "description": "Minimum setback distance for solid facades without openings (sin vano), in meters. Calculated as approximately h/8 for Zone EA12 Providencia (42 m height)."
         }
     },
 
