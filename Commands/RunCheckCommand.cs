@@ -79,6 +79,8 @@ namespace PlanUp.Commands
                 // In plan views, the inclined planes look confusing.
 
                 bool is3DView = doc.ActiveView is View3D;
+                bool isPlanView = doc.ActiveView is ViewPlan;
+                bool canVisualize = is3DView || isPlanView;
 
                 double rasanteAngle = 70.0;
                 double rasanteBaseHeight = 0.0;
@@ -122,43 +124,50 @@ namespace PlanUp.Commands
                         RasanteVisualizer.ClearWallHighlights(doc, doc.ActiveView);
                     }
 
-                    if (is3DView)
+                    if (canVisualize)
                     {
-                        // Create rasante surfaces
-                        List<ElementId> rasanteIds = RasanteVisualizer.CreateRasanteSurfaces(
-                            doc, rasanteAngle, rasanteBaseHeight);
-
-                        if (rasanteIds.Count > 0)
+                        // Get violating boundary indices from rasante check
+                        HashSet<int> violatingBoundaries = new HashSet<int>();
+                        if (rasanteHasViolations)
                         {
-                            View activeView = doc.ActiveView;
-                            RasanteVisualizer.ApplyColorOverrides(
-                                doc, activeView, rasanteIds, rasanteHasViolations);
+                            RasanteResult rasResult = RasanteExtractor.Extract(
+                                doc, rasanteAngle, rasanteBaseHeight);
+                            if (rasResult.IsValid && rasResult.HasViolations)
+                            {
+                                foreach (var v in rasResult.Violations)
+                                {
+                                    violatingBoundaries.Add(v.BoundaryIndex);
+                                }
+
+                                // Highlight violating walls
+                                List<ElementId> violatingWallIds = rasResult.Violations
+                                    .Select(v => v.ElementId)
+                                    .Where(id => id != ElementId.InvalidElementId)
+                                    .Distinct()
+                                    .ToList();
+
+                                RasanteVisualizer.HighlightViolatingWalls(
+                                    doc, doc.ActiveView, violatingWallIds);
+                            }
                         }
-                    }
 
-                    // Highlight violating walls red (works in any view)
-                    CheckResult rasanteCheckResult = results.FirstOrDefault(
-                        r => r.RuleId != null && r.RuleId.Contains("rasante"));
+                        // Create rasante surfaces with per-plane coloring
+                        List<RasanteVisualizer.PlaneInfo> planes =
+                            RasanteVisualizer.CreateRasanteSurfacesWithIndex(
+                                doc, rasanteAngle, rasanteBaseHeight);
 
-                    if (rasanteCheckResult != null && rasanteCheckResult.Status == ComplianceStatus.Red)
-                    {
-                        // Run the rasante extractor again to get violation ElementIds
-                        RasanteResult rasResult = RasanteExtractor.Extract(doc, rasanteAngle, rasanteBaseHeight);
-                        if (rasResult.IsValid && rasResult.HasViolations)
+                        if (planes.Count > 0)
                         {
-                            List<ElementId> violatingWallIds = rasResult.Violations
-                                .Select(v => v.ElementId)
-                                .Where(id => id != ElementId.InvalidElementId)
-                                .Distinct()
-                                .ToList();
-
-                            RasanteVisualizer.HighlightViolatingWalls(
-                                doc, doc.ActiveView, violatingWallIds);
+                            RasanteVisualizer.ApplyPerPlaneColors(
+                                doc, doc.ActiveView, planes, violatingBoundaries);
                         }
                     }
 
                     visTx.Commit();
                 }
+
+                // Force the view to refresh so the rasante planes appear immediately
+                uidoc.RefreshActiveView();
 
                 // ---- STEP 4: LOAD RESULTS INTO THE PANEL ----
 

@@ -17,19 +17,27 @@
         <!-- HEADER SECTION -->
         <StackPanel Grid.Row="0" Background="#2C3E50" Margin="0,0,0,0">
 
-            <Image Height="40"
-                   HorizontalAlignment="Left"
-                   Margin="12,10,12,4"
-                   RenderOptions.BitmapScalingMode="HighQuality">
-                <Image.Source>
-                    <BitmapImage UriSource="pack://application:,,,/PlanUp;component/Resources/PlanUp_logo_white_transparent.png"/>
-                </Image.Source>
-            </Image>
+            <TextBlock Text="Compliance Check"
+                       Foreground="White"
+                       FontSize="16"
+                       FontWeight="Bold"
+                       Margin="12,10,12,0"/>
 
-            <TextBlock Text="Building Code Compliance Check"
-                       Foreground="#95A5A6"
-                       FontSize="11"
-                       Margin="12,0,12,8"/>
+            <StackPanel Orientation="Horizontal" Margin="12,2,12,8">
+                <TextBlock Text="by "
+                           Foreground="White"
+                           FontSize="11"
+                           VerticalAlignment="Bottom"
+                           Margin="0,0,2,0"/>
+                <Image Height="22"
+                       VerticalAlignment="Bottom"
+                       Margin="0,0,0,1"
+                       RenderOptions.BitmapScalingMode="HighQuality">
+                    <Image.Source>
+                        <BitmapImage UriSource="pack://application:,,,/PlanUp;component/Resources/PlanUp_logo_white_transparent.png"/>
+                    </Image.Source>
+                </Image>
+            </StackPanel>
 
             <!-- Summary bar: shows count of results by status -->
             <Border x:Name="SummaryBar"

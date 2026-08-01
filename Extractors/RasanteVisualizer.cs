@@ -22,6 +22,160 @@ namespace PlanUp.Extractors
             new ElementId(BuiltInCategory.OST_GenericModel);
 
         /// <summary>
+        /// Holds a DirectShape ID and its boundary segment index.
+        /// </summary>
+        public class PlaneInfo
+        {
+            public ElementId Id { get; set; }
+            public int BoundaryIndex { get; set; }
+        }
+
+        /// <summary>
+        /// Creates rasante surfaces and returns them with their boundary index
+        /// so each plane can be colored individually.
+        /// </summary>
+        public static List<PlaneInfo> CreateRasanteSurfacesWithIndex(
+            Document doc,
+            double angleDegrees,
+            double baseHeightM,
+            double maxDepthM = 50.0)
+        {
+            List<PlaneInfo> planeInfos = new List<PlaneInfo>();
+
+            List<Curve> boundary = GetPropertyBoundary(doc);
+            if (boundary.Count == 0) return planeInfos;
+
+            double angleRadians = angleDegrees * Math.PI / 180.0;
+            double tanAngle = Math.Tan(angleRadians);
+            double groundLevel = GetGroundLevel(doc);
+            double baseHeightFeet = baseHeightM * MetersToFeet;
+            double maxDepthFeet = maxDepthM * MetersToFeet;
+            double baseZ = groundLevel + baseHeightFeet;
+
+            XYZ siteCenter = GetSiteCenter(boundary);
+
+            for (int i = 0; i < boundary.Count; i++)
+            {
+                try
+                {
+                    Curve current = boundary[i];
+                    XYZ start = current.GetEndPoint(0);
+                    XYZ end = current.GetEndPoint(1);
+
+                    XYZ boundaryDir = (end - start).Normalize();
+                    XYZ normal1 = new XYZ(-boundaryDir.Y, boundaryDir.X, 0);
+                    XYZ normal2 = new XYZ(boundaryDir.Y, -boundaryDir.X, 0);
+                    XYZ boundaryMid = (start + end) / 2.0;
+                    XYZ toCenter = (siteCenter - boundaryMid).Normalize();
+                    XYZ inwardNormal = (toCenter.DotProduct(normal1) > 0) ? normal1 : normal2;
+
+                    double depth = 0;
+                    foreach (Curve c in boundary)
+                    {
+                        XYZ p1 = c.GetEndPoint(0);
+                        XYZ p2 = c.GetEndPoint(1);
+                        double d1 = (p1 - boundaryMid).DotProduct(inwardNormal);
+                        double d2 = (p2 - boundaryMid).DotProduct(inwardNormal);
+                        depth = Math.Max(depth, Math.Max(d1, d2));
+                    }
+                    depth = Math.Min(depth, maxDepthFeet);
+                    if (depth < 1.0) depth = maxDepthFeet;
+
+                    XYZ bottomLeft = new XYZ(start.X, start.Y, baseZ);
+                    XYZ bottomRight = new XYZ(end.X, end.Y, baseZ);
+
+                    double topHeightFeet = baseHeightFeet + (depth * tanAngle);
+                    double topZ = groundLevel + topHeightFeet;
+
+                    XYZ topLeft = new XYZ(
+                        start.X + inwardNormal.X * depth,
+                        start.Y + inwardNormal.Y * depth,
+                        topZ);
+                    XYZ topRight = new XYZ(
+                        end.X + inwardNormal.X * depth,
+                        end.Y + inwardNormal.Y * depth,
+                        topZ);
+
+                    TessellatedShapeBuilder builder = new TessellatedShapeBuilder();
+                    builder.OpenConnectedFaceSet(false);
+
+                    builder.AddFace(new TessellatedFace(
+                        new List<XYZ> { bottomLeft, bottomRight, topRight },
+                        ElementId.InvalidElementId));
+                    builder.AddFace(new TessellatedFace(
+                        new List<XYZ> { bottomLeft, topRight, topLeft },
+                        ElementId.InvalidElementId));
+
+                    builder.CloseConnectedFaceSet();
+                    builder.Build();
+
+                    TessellatedShapeBuilderResult result = builder.GetBuildResult();
+
+                    DirectShape ds = DirectShape.CreateElement(doc, DirectShapeCategoryId);
+                    ds.ApplicationId = "PlanUp";
+                    ds.ApplicationDataId = "RasanteEnvelope";
+
+                    IList<GeometryObject> geomObjects = result.GetGeometricalObjects();
+                    if (geomObjects.Count > 0)
+                    {
+                        ds.SetShape(geomObjects);
+                        ds.SetName("PlanUp Rasante Envelope");
+                        planeInfos.Add(new PlaneInfo { Id = ds.Id, BoundaryIndex = i });
+                    }
+                }
+                catch { continue; }
+            }
+
+            return planeInfos;
+        }
+
+        /// <summary>
+        /// Colors each rasante plane individually:
+        /// red for boundary segments with violations, green for compliant ones.
+        /// </summary>
+        public static void ApplyPerPlaneColors(
+            Document doc,
+            View view,
+            List<PlaneInfo> planes,
+            HashSet<int> violatingBoundaryIndices)
+        {
+            // Find solid fill pattern
+            ElementId solidPatternId = ElementId.InvalidElementId;
+            FilteredElementCollector patternCollector = new FilteredElementCollector(doc)
+                .OfClass(typeof(FillPatternElement));
+
+            foreach (FillPatternElement fpe in patternCollector)
+            {
+                FillPattern fp = fpe.GetFillPattern();
+                if (fp != null && fp.IsSolidFill)
+                {
+                    solidPatternId = fpe.Id;
+                    break;
+                }
+            }
+
+            foreach (PlaneInfo plane in planes)
+            {
+                bool isViolating = violatingBoundaryIndices.Contains(plane.BoundaryIndex);
+
+                OverrideGraphicSettings ogs = new OverrideGraphicSettings();
+                Color color = isViolating
+                    ? new Color(231, 76, 60)    // red
+                    : new Color(39, 174, 96);   // green
+
+                ogs.SetSurfaceForegroundPatternColor(color);
+                ogs.SetSurfaceTransparency(70);
+
+                if (solidPatternId != ElementId.InvalidElementId)
+                {
+                    ogs.SetSurfaceForegroundPatternId(solidPatternId);
+                }
+
+                view.SetElementOverrides(plane.Id, ogs);
+            }
+        }
+
+        /// <summary>
         /// Creates rasante envelope surfaces with proper clipping between
         /// adjacent boundary segments.
         /// Must be called within a Transaction.
