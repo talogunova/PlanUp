@@ -1,0 +1,42 @@
+{
+    "rule_id": "OGUC-1.1.2-altura",
+    "jurisdiction": "CL-OGUC",
+    "article": "Art. 1.1.2",
+    "source_url": "https://modulor.cl/oguc-disposiciones-generales-normas-de-competencia-definiciones-y-plazos/",
+    "name": "Altura maxima de edificacion",
+    "description": "Vertical distance from natural ground level to the highest point of the building, compared against the maximum height allowed by the Plan Regulador Comunal for the project zone.",
+    "version": "2024-04",
+
+    "geometry_required": [
+        "building_max_height",
+        "natural_ground_level"
+    ],
+
+    "parameters": {
+        "max_height_m": {
+            "value": null,
+            "source": "Plan Regulador Comunal",
+            "description": "Maximum building height allowed in the project zone, in meters. Must be set by the user based on the applicable PRC zone."
+        }
+    },
+
+    "evaluation": {
+        "type": "max_threshold",
+        "measured": "building_max_height",
+        "baseline": "natural_ground_level",
+        "limit_param": "max_height_m",
+        "unit": "m"
+    },
+
+    "traffic_light": {
+        "green": "measured <= limit",
+        "yellow": "measured > limit * 0.95 AND measured <= limit",
+        "red": "measured > limit"
+    },
+
+    "messages": {
+        "green": "Building height ({measured} m) is within the allowed maximum ({limit} m)",
+        "yellow": "Building height ({measured} m) is close to the allowed maximum ({limit} m). Verify tolerances.",
+        "red": "Building height ({measured} m) exceeds the allowed maximum ({limit} m)"
+    }
+}

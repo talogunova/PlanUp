@@ -1,0 +1,49 @@
+{
+    "rule_id": "OGUC-2.6.3-rasante",
+    "jurisdiction": "CL-OGUC",
+    "article": "Art. 2.6.3",
+    "source_url": "https://www.bcn.cl/leychile/Navegar?idNorma=8201&idParte=100008867",
+    "name": "Rasante",
+    "description": "An inclined plane rises from each property boundary at a defined angle. The building volume must not intersect this plane. The rasante is applied at every point along the property boundaries and at the midpoint of the official street lines facing the site.",
+    "version": "2024-04",
+
+    "geometry_required": [
+        "property_boundaries",
+        "building_envelope_solid",
+        "natural_ground_level"
+    ],
+
+    "parameters": {
+        "rasante_angle_degrees": {
+            "value": 70,
+            "source": "OGUC Art. 2.6.3",
+            "description": "Angle in degrees measured from horizontal at the property boundary. Default is 70 degrees per OGUC. Can be modified by Plan Regulador Comunal."
+        },
+        "rasante_base_height_m": {
+            "value": 0,
+            "source": "OGUC Art. 2.6.3",
+            "description": "Height above natural ground at the property boundary from which the rasante angle begins. Typically 0 unless modified by PRC."
+        }
+    },
+
+    "evaluation": {
+        "type": "envelope_intersection",
+        "envelope_source": "rasante_planes",
+        "building_geometry": "building_envelope_solid",
+        "angle_param": "rasante_angle_degrees",
+        "base_height_param": "rasante_base_height_m",
+        "unit": "m"
+    },
+
+    "traffic_light": {
+        "green": "no intersection detected",
+        "yellow": "building surface within 0.5 m of rasante plane",
+        "red": "building volume intersects rasante plane"
+    },
+
+    "messages": {
+        "green": "Building volume is within the rasante envelope on all boundaries",
+        "yellow": "Building volume is close to the rasante envelope on {boundary_name} (within {distance} m). Verify geometry.",
+        "red": "Building volume exceeds the rasante envelope on {boundary_name} by {distance} m at level {level}"
+    }
+}

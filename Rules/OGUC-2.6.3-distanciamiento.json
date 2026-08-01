@@ -1,0 +1,49 @@
+{
+    "rule_id": "OGUC-2.6.3-distanciamiento",
+    "jurisdiction": "CL-OGUC",
+    "article": "Art. 2.6.3 / 2.6.4",
+    "source_url": "https://www.bcn.cl/leychile/Navegar?idNorma=8201&idParte=100008867",
+    "name": "Distanciamiento a deslindes",
+    "description": "Minimum horizontal distance from the exterior face of the building to each property boundary. The required distance depends on building height and whether the facade has openings (windows, doors) or is a solid wall.",
+    "version": "2024-04",
+
+    "geometry_required": [
+        "property_boundaries",
+        "building_facade_faces",
+        "facade_openings_classification"
+    ],
+
+    "parameters": {
+        "min_distance_con_vano_m": {
+            "value": null,
+            "source": "OGUC Art. 2.6.3 tabla",
+            "description": "Minimum setback distance for facades with openings (con vano), in meters. Depends on building height per OGUC table."
+        },
+        "min_distance_sin_vano_m": {
+            "value": null,
+            "source": "OGUC Art. 2.6.3 tabla",
+            "description": "Minimum setback distance for solid facades without openings (sin vano), in meters. Depends on building height per OGUC table."
+        }
+    },
+
+    "evaluation": {
+        "type": "min_threshold_per_face",
+        "measured": "facade_to_boundary_distance",
+        "classification": "facade_openings_classification",
+        "limit_param_con_vano": "min_distance_con_vano_m",
+        "limit_param_sin_vano": "min_distance_sin_vano_m",
+        "unit": "m"
+    },
+
+    "traffic_light": {
+        "green": "measured >= limit * 1.05",
+        "yellow": "measured >= limit AND measured < limit * 1.05",
+        "red": "measured < limit"
+    },
+
+    "messages": {
+        "green": "Setback distance ({measured} m) exceeds the minimum required ({limit} m) on {boundary_name}",
+        "yellow": "Setback distance ({measured} m) complies but is close to the minimum ({limit} m) on {boundary_name}. Verify tolerances.",
+        "red": "Setback distance ({measured} m) is less than the minimum required ({limit} m) on {boundary_name}"
+    }
+}

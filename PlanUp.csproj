@@ -29,4 +29,11 @@
     <Resource Include="Resources\PlanUp_logo_white_transparent.png" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="Rules\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>Rules\%(Filename)%(Extension)</Link>
+    </None>
+  </ItemGroup>
+
 </Project>

@@ -17,3 +17,6 @@ C:\Users\wowyo\source\repos\PlanUp\obj\Debug\PlanUp_MarkupCompile.lref
 C:\Users\wowyo\source\repos\PlanUp\obj\Debug\UI\CompliancePanel.baml
 C:\Users\wowyo\source\repos\PlanUp\obj\Debug\PlanUp.g.resources
 C:\Users\wowyo\source\repos\PlanUp\obj\Debug\PlanUp.sourcelink.json
+C:\Users\wowyo\AppData\Roaming\Autodesk\Revit\Addins\2025\PlanUp\Rules\OGUC-1.1.2-altura.json
+C:\Users\wowyo\AppData\Roaming\Autodesk\Revit\Addins\2025\PlanUp\Rules\OGUC-2.6.3-distanciamiento.json
+C:\Users\wowyo\AppData\Roaming\Autodesk\Revit\Addins\2025\PlanUp\Rules\OGUC-2.6.3-rasante.json

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
@@ -11,11 +13,9 @@ namespace PlanUp.Commands
     /// <summary>
     /// The command that runs when the user clicks "Run Check" on the ribbon.
     /// 
-    /// For Step 2, this creates three hardcoded dummy results (one green, one yellow,
-    /// one red) and sends them to the dockable panel. This lets us verify the full
-    /// UI pipeline works before connecting real geometry extractors.
-    /// 
-    /// In Step 4, the dummy data will be replaced by actual ComplianceEngine output.
+    /// Step 3: Now loads rule definitions from JSON files using ComplianceEngine,
+    /// then shows a summary of what was loaded. Still uses dummy results in the
+    /// panel because real geometry extractors come in Step 4.
     /// </summary>
     [Transaction(TransactionMode.Manual)]
     [Regeneration(RegenerationOption.Manual)]
@@ -34,77 +34,116 @@ namespace PlanUp.Commands
 
                 // ---- SHOW THE DOCKABLE PANE ----
 
-                // Get a reference to the dockable pane using the GUID we registered.
-                // DockablePane is a Revit class that lets us show, hide, and check
-                // the state of our panel.
                 DockablePane pane = uiApp.GetDockablePane(PlanUpApp.CompliancePaneId);
 
-                // If the pane is not visible, show it.
-                // The user can also show/hide it from View > User Interface in Revit.
                 if (pane != null && !pane.IsShown())
                 {
                     pane.Show();
                 }
 
+                // ---- LOAD RULES FROM JSON ----
+
+                // Find the Rules folder next to the DLL
+                string assemblyDir = Path.GetDirectoryName(
+                    Assembly.GetExecutingAssembly().Location) ?? "";
+                string rulesFolder = Path.Combine(assemblyDir, "Rules");
+
+                // Create the engine, which loads all rule files automatically
+                ComplianceEngine engine = new ComplianceEngine(rulesFolder);
+
+                // Show what was loaded (temporary, for development)
+                TaskDialog.Show("PlanUp Engine", engine.GetLoadSummary());
+
                 // ---- CREATE DUMMY RESULTS ----
 
-                // These three results demonstrate each traffic light state.
-                // The values are realistic OGUC numbers so the UI looks
-                // like the real thing when demoing.
+                // Still using dummy results until geometry extractors are built.
+                // But now each dummy result uses metadata from the loaded rules
+                // to ensure consistency between the JSON definitions and the UI.
 
-                List<CheckResult> dummyResults = new List<CheckResult>
+                List<CheckResult> dummyResults = new List<CheckResult>();
+
+                // Build dummy results from loaded rules
+                foreach (var rule in engine.Rules.Values)
                 {
-                    // GREEN: building height is well within limits
-                    new CheckResult
-                    {
-                        RuleId = "OGUC-2.6.3-altura",
-                        ArticleReference = "Art. 1.1.2 / PRC",
-                        RuleName = "Altura maxima de edificacion",
-                        MeasuredValue = 12.5,
-                        AllowedValue = 15.0,
-                        Unit = "m",
-                        Status = ComplianceStatus.Green,
-                        SourceUrl = "https://modulor.cl/oguc-disposiciones-generales-normas-de-competencia-definiciones-y-plazos/",
-                        StatusMessage = "Building height (12.5 m) is within the allowed maximum (15.0 m)",
-                        DetailDescription = "Measured from natural ground level to the highest point of the building. Limit set by Plan Regulador Comunal zone Z-3."
-                    },
+                    CheckResult result;
 
-                    // YELLOW: setback is close to the minimum (within 5%)
-                    new CheckResult
+                    switch (rule.evaluation.type)
                     {
-                        RuleId = "OGUC-2.6.3-distanciamiento",
-                        ArticleReference = "Art. 2.6.3 / 2.6.4",
-                        RuleName = "Distanciamiento a deslinde norte",
-                        MeasuredValue = 2.1,
-                        AllowedValue = 2.0,
-                        Unit = "m",
-                        Status = ComplianceStatus.Yellow,
-                        SourceUrl = "https://www.bcn.cl/leychile/Navegar?idNorma=8201&idParte=100008867",
-                        StatusMessage = "Setback distance (2.1 m) complies but is close to the minimum (2.0 m). Verify tolerances.",
-                        DetailDescription = "Facade without openings. Distance measured from exterior wall face to nearest property boundary."
+                        case "max_threshold":
+                            result = new CheckResult
+                            {
+                                RuleId = rule.rule_id,
+                                ArticleReference = rule.article,
+                                RuleName = rule.name,
+                                MeasuredValue = 12.5,
+                                AllowedValue = 15.0,
+                                Unit = rule.evaluation.unit,
+                                Status = ComplianceStatus.Green,
+                                SourceUrl = rule.source_url,
+                                StatusMessage = rule.messages.green
+                                    .Replace("{measured}", "12.5")
+                                    .Replace("{limit}", "15.0"),
+                                DetailDescription = rule.description
+                            };
+                            break;
 
-                    },
+                        case "min_threshold_per_face":
+                            result = new CheckResult
+                            {
+                                RuleId = rule.rule_id,
+                                ArticleReference = rule.article,
+                                RuleName = rule.name,
+                                MeasuredValue = 2.1,
+                                AllowedValue = 2.0,
+                                Unit = rule.evaluation.unit,
+                                Status = ComplianceStatus.Yellow,
+                                SourceUrl = rule.source_url,
+                                StatusMessage = rule.messages.yellow
+                                    .Replace("{measured}", "2.1")
+                                    .Replace("{limit}", "2.0")
+                                    .Replace("{boundary_name}", "north boundary"),
+                                DetailDescription = rule.description
+                            };
+                            break;
 
-                    // RED: building pierces the rasante envelope
-                    new CheckResult
-                    {
-                        RuleId = "OGUC-2.6.3-rasante",
-                        ArticleReference = "Art. 2.6.3",
-                        RuleName = "Rasante deslinde oriente",
-                        MeasuredValue = 72.0,
-                        AllowedValue = 70.0,
-                        Unit = "\u00B0",  // degree symbol
-                        Status = ComplianceStatus.Red,
-                        SourceUrl = "https://www.bcn.cl/leychile/Navegar?idNorma=8201&idParte=100008867",
-                        StatusMessage = "Building volume exceeds the rasante envelope on the east property boundary. Volumetric modification required.",
-                        DetailDescription = "Rasante is measured from the property boundary line at a 70 degree angle. The building volume intersects the rasante plane at level 4."
+                        case "envelope_intersection":
+                            result = new CheckResult
+                            {
+                                RuleId = rule.rule_id,
+                                ArticleReference = rule.article,
+                                RuleName = rule.name,
+                                MeasuredValue = 72.0,
+                                AllowedValue = 70.0,
+                                Unit = "\u00B0",
+                                Status = ComplianceStatus.Red,
+                                SourceUrl = rule.source_url,
+                                StatusMessage = rule.messages.red
+                                    .Replace("{boundary_name}", "east boundary")
+                                    .Replace("{distance}", "0.8")
+                                    .Replace("{level}", "4"),
+                                DetailDescription = rule.description
+                            };
+                            break;
+
+                        default:
+                            result = new CheckResult
+                            {
+                                RuleId = rule.rule_id,
+                                ArticleReference = rule.article,
+                                RuleName = rule.name,
+                                Status = ComplianceStatus.Yellow,
+                                SourceUrl = rule.source_url,
+                                StatusMessage = $"Unknown evaluation type: {rule.evaluation.type}",
+                                DetailDescription = rule.description
+                            };
+                            break;
                     }
-                };
+
+                    dummyResults.Add(result);
+                }
 
                 // ---- LOAD RESULTS INTO THE PANEL ----
 
-                // Get the panel instance we stored in PlanUpApp during startup
-                // and send the results to it.
                 CompliancePanel panel = PlanUpApp.CompliancePanelInstance;
                 if (panel != null)
                 {
