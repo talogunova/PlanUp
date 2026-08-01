@@ -68,6 +68,7 @@ namespace PlanUp.UI
             {
                 DockPosition = DockPosition.Right
             };
+            data.VisibleByDefault = false;
         }
 
         /// <summary>
