@@ -7,6 +7,11 @@
     "description": "An inclined plane rises from each property boundary at a defined angle. The building volume must not intersect this plane. The rasante is applied at every point along the property boundaries and at the midpoint of the official street lines facing the site.",
     "version": "2024-04",
 
+    "enabled": true,
+    "warning_buffer": 0.5,
+    "safety_margin_percent": 0.0,
+    "notes": "Verify rasante at midpoint of public space lines per Art. 2.6.3 clause 2. Some PRCs override the default 70 degree angle for specific zones.",
+
     "geometry_required": [
         "property_boundaries",
         "building_envelope_solid",
@@ -37,7 +42,7 @@
 
     "traffic_light": {
         "green": "no intersection detected",
-        "yellow": "building surface within 0.5 m of rasante plane",
+        "yellow": "building surface within buffer of rasante plane",
         "red": "building volume intersects rasante plane"
     },
 

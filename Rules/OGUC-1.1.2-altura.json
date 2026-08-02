@@ -7,6 +7,11 @@
     "description": "Vertical distance from natural ground level to the highest point of the building, compared against the maximum height allowed by the Plan Regulador Comunal for the project zone.",
     "version": "2024-04",
 
+    "enabled": true,
+    "warning_buffer": 1.0,
+    "safety_margin_percent": 0.0,
+    "notes": "DOM Providencia typically measures from top of parapet or mechanical enclosure, not roof slab. Confirm measurement reference with DOM before submission.",
+
     "geometry_required": [
         "building_max_height",
         "natural_ground_level"
@@ -16,7 +21,7 @@
         "max_height_m": {
             "value": 42.0,
             "source": "Plan Regulador Comunal",
-            "description": "Maximum building height allowed in the project zone, in meters. Must be set by the user based on the applicable PRC zone. Demo value: 42.0 m (Zone EA12, Providencia)."
+            "description": "Maximum building height allowed in the project zone, in meters. Demo value: 42.0 m (Zone EA12, Providencia)."
         }
     },
 
@@ -30,7 +35,7 @@
 
     "traffic_light": {
         "green": "measured <= limit",
-        "yellow": "measured > limit * 0.95 AND measured <= limit",
+        "yellow": "measured > limit - buffer AND measured <= limit",
         "red": "measured > limit"
     },
 

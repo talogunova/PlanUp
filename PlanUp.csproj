@@ -15,6 +15,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="PDFsharpCore" Version="1.3.65" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Reference Include="RevitAPI">
       <HintPath>C:\Program Files\Autodesk\Revit 2025\RevitAPI.dll</HintPath>
       <Private>False</Private>
@@ -27,6 +31,10 @@
 
   <ItemGroup>
     <Resource Include="Resources\PlanUp_logo_white_transparent.png" />
+    <None Include="Resources\PlanUp_logo_white_transparent.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>Resources\PlanUp_logo_white_transparent.png</Link>
+    </None>
     <Resource Include="Resources\icon_run_check.png" />
     <Resource Include="Resources\icon_settings.png" />
     <Resource Include="Resources\icon_report.png" />

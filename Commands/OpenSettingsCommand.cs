@@ -1,7 +1,10 @@
 using System;
+using System.IO;
+using System.Reflection;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using PlanUp.UI;
 
 namespace PlanUp.Commands
 {
@@ -14,12 +17,24 @@ namespace PlanUp.Commands
             ref string message,
             ElementSet elements)
         {
-            TaskDialog.Show("PlanUp Settings",
-                "Settings panel coming soon.\n\nHere you will configure:\n" +
-                "- Project zone (comuna and zone code)\n" +
-                "- PRC parameter overrides\n" +
-                "- Rasante visualization options");
-            return Result.Succeeded;
+            try
+            {
+                // Find the Rules folder
+                string assemblyDir = Path.GetDirectoryName(
+                    Assembly.GetExecutingAssembly().Location) ?? "";
+                string rulesFolder = Path.Combine(assemblyDir, "Rules");
+
+                // Open the settings dialog
+                SettingsWindow window = new SettingsWindow(rulesFolder);
+                window.ShowDialog();
+
+                return Result.Succeeded;
+            }
+            catch (Exception ex)
+            {
+                message = ex.Message;
+                return Result.Failed;
+            }
         }
     }
 }

@@ -1,0 +1,144 @@
+<Window x:Class="PlanUp.UI.RulesWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="PlanUp Rules"
+        Width="500"
+        Height="580"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        Background="#FAFAFA">
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- HEADER -->
+        <TextBlock Grid.Row="0"
+                   Text="Loaded Compliance Rules"
+                   FontSize="15"
+                   FontWeight="SemiBold"
+                   Foreground="#2C3E50"
+                   Margin="0,0,0,12"/>
+
+        <!-- RULES LIST -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <ItemsControl x:Name="RulesList">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border BorderBrush="#E0E0E0"
+                                BorderThickness="0,0,0,1"
+                                Padding="0,12"
+                                Margin="0,0,0,4">
+                            <StackPanel>
+                                <!-- Rule header: name + enable toggle -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="{Binding Name}"
+                                                   FontSize="14"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="#2C3E50"/>
+                                        <TextBlock FontSize="11" Foreground="#7F8C8D" Margin="0,2,0,0">
+                                            <Run Text="{Binding Article, Mode=OneWay}"/>
+                                            <Run Text=" | "/>
+                                            <Run Text="{Binding Jurisdiction, Mode=OneWay}"/>
+                                            <Run Text=" | v"/>
+                                            <Run Text="{Binding Version, Mode=OneWay}"/>
+                                        </TextBlock>
+                                    </StackPanel>
+
+                                    <CheckBox Grid.Column="1"
+                                              IsChecked="{Binding Enabled}"
+                                              Content="Enabled"
+                                              FontSize="11"
+                                              Foreground="#7F8C8D"
+                                              VerticalAlignment="Center"
+                                              Margin="0,0,16,0"/>
+                                </Grid>
+
+                                <!-- Editable fields -->
+                                <Grid Margin="0,10,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <!-- Warning buffer -->
+                                    <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,6">
+                                        <TextBlock Text="Warning buffer"
+                                                   FontSize="10" Foreground="#95A5A6"/>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBox Text="{Binding WarningBuffer, StringFormat=F1}"
+                                                     Width="50" FontSize="12"
+                                                     Padding="4,3" Margin="0,2,4,0"/>
+                                            <TextBlock Text="{Binding Unit, Mode=OneWay}"
+                                                       FontSize="11" Foreground="#7F8C8D"
+                                                       VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <!-- Safety margin -->
+                                    <StackPanel Grid.Row="0" Grid.Column="1" Margin="8,0,0,6">
+                                        <TextBlock Text="Safety margin"
+                                                   FontSize="10" Foreground="#95A5A6"/>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBox Text="{Binding SafetyMargin, StringFormat=F0}"
+                                                     Width="50" FontSize="12"
+                                                     Padding="4,3" Margin="0,2,4,0"/>
+                                            <TextBlock Text="%"
+                                                       FontSize="11" Foreground="#7F8C8D"
+                                                       VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- Notes -->
+                                <StackPanel Margin="0,4,0,0">
+                                    <TextBlock Text="Firm notes"
+                                               FontSize="10" Foreground="#95A5A6"/>
+                                    <TextBox Text="{Binding Notes}"
+                                             FontSize="11"
+                                             TextWrapping="Wrap"
+                                             AcceptsReturn="True"
+                                             MinHeight="40"
+                                             MaxHeight="80"
+                                             Padding="4,3"
+                                             Margin="0,2,0,0"
+                                             Foreground="#34495E"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <!-- BUTTONS -->
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,12,0,0">
+            <Button x:Name="ApplyButton"
+                    Content="Apply"
+                    Width="80" Height="30"
+                    FontSize="12"
+                    Margin="0,0,8,0"
+                    Click="ApplyButton_Click"/>
+            <Button Content="Close"
+                    Width="80" Height="30"
+                    FontSize="12"
+                    Click="CloseButton_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

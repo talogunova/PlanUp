@@ -1,7 +1,10 @@
 using System;
+using System.IO;
+using System.Reflection;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using PlanUp.UI;
 
 namespace PlanUp.Commands
 {
@@ -14,12 +17,22 @@ namespace PlanUp.Commands
             ref string message,
             ElementSet elements)
         {
-            TaskDialog.Show("PlanUp Rules",
-                "Rule manager coming soon.\n\nThis will allow:\n" +
-                "- Browse available rule sets\n" +
-                "- Import rules for new jurisdictions\n" +
-                "- Edit PRC parameters per zone");
-            return Result.Succeeded;
+            try
+            {
+                string assemblyDir = Path.GetDirectoryName(
+                    Assembly.GetExecutingAssembly().Location) ?? "";
+                string rulesFolder = Path.Combine(assemblyDir, "Rules");
+
+                RulesWindow window = new RulesWindow(rulesFolder);
+                window.ShowDialog();
+
+                return Result.Succeeded;
+            }
+            catch (Exception ex)
+            {
+                message = ex.Message;
+                return Result.Failed;
+            }
         }
     }
 }

@@ -1,8 +1,13 @@
 {
   "version": 2,
-  "dgSpecHash": "NAG7S/fcHg0=",
+  "dgSpecHash": "BIQlFF7Cnx4=",
   "success": true,
   "projectFilePath": "C:\\Users\\wowyo\\source\\repos\\PlanUp\\PlanUp.csproj",
-  "expectedPackageFiles": [],
+  "expectedPackageFiles": [
+    "C:\\Users\\wowyo\\.nuget\\packages\\pdfsharpcore\\1.3.65\\pdfsharpcore.1.3.65.nupkg.sha512",
+    "C:\\Users\\wowyo\\.nuget\\packages\\sharpziplib\\1.4.2\\sharpziplib.1.4.2.nupkg.sha512",
+    "C:\\Users\\wowyo\\.nuget\\packages\\sixlabors.fonts\\1.0.0-beta17\\sixlabors.fonts.1.0.0-beta17.nupkg.sha512",
+    "C:\\Users\\wowyo\\.nuget\\packages\\sixlabors.imagesharp\\1.0.4\\sixlabors.imagesharp.1.0.4.nupkg.sha512"
+  ],
   "logs": []
 }

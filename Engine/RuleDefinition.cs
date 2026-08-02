@@ -59,6 +59,33 @@ namespace PlanUp.Engine
         public string version { get; set; } = "";
 
         /// <summary>
+        /// Whether this check is enabled. Disabled checks are skipped.
+        /// Default true. User can toggle off checks not relevant to their project.
+        /// </summary>
+        public bool enabled { get; set; } = true;
+
+        /// <summary>
+        /// Warning buffer in the same unit as the evaluation.
+        /// Controls when yellow (warning) status triggers.
+        /// Default 1.0 for heights (meters), 0.5 for setbacks (meters).
+        /// </summary>
+        public double warning_buffer { get; set; } = 1.0;
+
+        /// <summary>
+        /// Firm safety margin as a percentage (0 to 100).
+        /// Reduces the effective limit by this percentage.
+        /// Example: 10% on a 42m limit makes the effective limit 37.8m.
+        /// Default 0 (no margin).
+        /// </summary>
+        public double safety_margin_percent { get; set; } = 0.0;
+
+        /// <summary>
+        /// Free text notes from the firm. Institutional knowledge, DOM quirks,
+        /// client requirements. Appears in the compliance report.
+        /// </summary>
+        public string notes { get; set; } = "";
+
+        /// <summary>
         /// List of geometry extractor names that this rule needs.
         /// Each string maps to a specific extractor function in the engine.
         /// Example: ["building_max_height", "natural_ground_level"]

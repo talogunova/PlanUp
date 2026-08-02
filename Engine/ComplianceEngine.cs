@@ -270,6 +270,10 @@ namespace PlanUp.Engine
 
             foreach (var rule in _rules.Values)
             {
+                // Skip disabled rules
+                if (!rule.enabled)
+                    continue;
+
                 CheckResult result;
 
                 switch (rule.evaluation.type)
@@ -348,9 +352,11 @@ namespace PlanUp.Engine
                 };
             }
 
-            // Step 3: Compare measured height against the limit
+            // Step 3: Apply safety margin and compare
             double measured = heightResult.Height;
-            double limit = limitValue.Value;
+            double rawLimit = limitValue.Value;
+            double limit = rawLimit * (1.0 - rule.safety_margin_percent / 100.0);
+            double buffer = rule.warning_buffer;
             string unit = rule.evaluation.unit;
 
             ComplianceStatus status;
@@ -363,7 +369,7 @@ namespace PlanUp.Engine
                     .Replace("{measured}", measured.ToString("F1"))
                     .Replace("{limit}", limit.ToString("F1"));
             }
-            else if (measured > limit - 1.0)
+            else if (measured > limit - buffer)
             {
                 status = ComplianceStatus.Yellow;
                 statusMessage = rule.messages.yellow
@@ -391,6 +397,7 @@ namespace PlanUp.Engine
                 StatusMessage = statusMessage,
                 DetailDescription = $"{rule.description}\n\nAnalyzed {heightResult.ElementCount} elements. "
                     + $"Highest point at {heightResult.MaxElevation} m, ground level at {heightResult.GroundLevel} m."
+                    + (string.IsNullOrEmpty(rule.notes) ? "" : $"\n\nNote: {rule.notes}")
             };
         }
 
@@ -484,12 +491,16 @@ namespace PlanUp.Engine
             double reportedLimit = 0;
             string detailLines = $"{rule.description}\n\nAnalyzed {setbackResult.WallSetbacks.Count} walls against {setbackResult.PropertyBoundarySegments} property boundary segments.\n";
 
+            // Apply safety margin to limits
+            double marginMultiplier = 1.0 + (rule.safety_margin_percent / 100.0);
+            double buffer = rule.warning_buffer;
+
             // Check con vano
             if (criticalConVano != null && limitConVano != null)
             {
                 double measured = criticalConVano.DistanceToPropertyLine;
-                double limit = limitConVano.Value;
-                ComplianceStatus status = EvaluateSetback(measured, limit);
+                double limit = limitConVano.Value * marginMultiplier;
+                ComplianceStatus status = EvaluateSetback(measured, limit, buffer);
 
                 detailLines += $"\nCritical wall with openings (con vano): {measured:F1} m to {criticalConVano.NearestBoundaryName} (min: {limit:F1} m)";
 
@@ -506,8 +517,8 @@ namespace PlanUp.Engine
             if (criticalSinVano != null && limitSinVano != null)
             {
                 double measured = criticalSinVano.DistanceToPropertyLine;
-                double limit = limitSinVano.Value;
-                ComplianceStatus status = EvaluateSetback(measured, limit);
+                double limit = limitSinVano.Value * marginMultiplier;
+                ComplianceStatus status = EvaluateSetback(measured, limit, buffer);
 
                 detailLines += $"\nCritical solid wall (sin vano): {measured:F1} m to {criticalSinVano.NearestBoundaryName} (min: {limit:F1} m)";
 
@@ -532,6 +543,9 @@ namespace PlanUp.Engine
                     .Replace("{boundary_name}", "all boundaries");
             }
 
+            if (!string.IsNullOrEmpty(rule.notes))
+                detailLines += $"\n\nNote: {rule.notes}";
+
             return new CheckResult
             {
                 RuleId = rule.rule_id,
@@ -551,11 +565,11 @@ namespace PlanUp.Engine
         /// Evaluates a single setback distance against its limit.
         /// Uses a 0.5 m buffer for the warning zone.
         /// </summary>
-        private ComplianceStatus EvaluateSetback(double measured, double limit)
+        private ComplianceStatus EvaluateSetback(double measured, double limit, double buffer)
         {
             if (measured < limit)
                 return ComplianceStatus.Red;
-            else if (measured < limit + 0.5)
+            else if (measured < limit + buffer)
                 return ComplianceStatus.Yellow;
             else
                 return ComplianceStatus.Green;
@@ -657,8 +671,11 @@ namespace PlanUp.Engine
             detailLines += $" at {worst.DistanceToBoundaryM:F1} m from {worst.BoundaryName}.";
             detailLines += $"\nPoint height: {worst.PointHeightM:F1} m, max allowed: {worst.MaxAllowedHeightM:F1} m.";
 
+            if (!string.IsNullOrEmpty(rule.notes))
+                detailLines += $"\n\nNote: {rule.notes}";
+
             // Determine if it is a warning (close) or a fail
-            ComplianceStatus status = worst.ExcessM > 0.5
+            ComplianceStatus status = worst.ExcessM > rule.warning_buffer
                 ? ComplianceStatus.Red
                 : ComplianceStatus.Yellow;
 

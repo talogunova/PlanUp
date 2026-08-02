@@ -7,6 +7,11 @@
     "description": "Minimum horizontal distance from the exterior face of the building to each property boundary. The required distance depends on building height and whether the facade has openings (windows, doors) or is a solid wall.",
     "version": "2024-04",
 
+    "enabled": true,
+    "warning_buffer": 0.5,
+    "safety_margin_percent": 0.0,
+    "notes": "For buildings over 7 stories, verify distanciamiento table values with the specific DOM. Some comunas apply stricter setbacks for facades facing residential neighbors.",
+
     "geometry_required": [
         "property_boundaries",
         "building_facade_faces",
@@ -36,8 +41,8 @@
     },
 
     "traffic_light": {
-        "green": "measured >= limit * 1.05",
-        "yellow": "measured >= limit AND measured < limit * 1.05",
+        "green": "measured >= limit + buffer",
+        "yellow": "measured >= limit AND measured < limit + buffer",
         "red": "measured < limit"
     },
 
