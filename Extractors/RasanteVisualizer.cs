@@ -5,53 +5,30 @@ using Autodesk.Revit.DB;
 
 namespace PlanUp.Extractors
 {
-    /// <summary>
-    /// Creates rasante envelope visualization and highlights violating walls.
-    /// 
-    /// Improvements over first version:
-    ///   - Planes are clipped at bisector lines between adjacent boundary
-    ///     segments so edges do not cross each other
-    ///   - Violating walls are colored red in the active view
-    /// </summary>
     public class RasanteVisualizer
     {
         private const double FeetToMeters = 0.3048;
         private const double MetersToFeet = 1.0 / 0.3048;
+        private static readonly ElementId DirectShapeCategoryId = new ElementId(BuiltInCategory.OST_GenericModel);
 
-        private static readonly ElementId DirectShapeCategoryId =
-            new ElementId(BuiltInCategory.OST_GenericModel);
-
-        /// <summary>
-        /// Holds a DirectShape ID and its boundary segment index.
-        /// </summary>
         public class PlaneInfo
         {
             public ElementId Id { get; set; }
             public int BoundaryIndex { get; set; }
         }
 
-        /// <summary>
-        /// Creates rasante surfaces and returns them with their boundary index
-        /// so each plane can be colored individually.
-        /// </summary>
-        public static List<PlaneInfo> CreateRasanteSurfacesWithIndex(
-            Document doc,
-            double angleDegrees,
-            double baseHeightM,
-            double maxDepthM = 50.0)
+        public static List<PlaneInfo> CreateRasanteSurfacesWithIndex(Document doc, double angleDegrees, double baseHeightM, double maxDepthM = 50.0)
         {
             List<PlaneInfo> planeInfos = new List<PlaneInfo>();
-
             List<Curve> boundary = GetPropertyBoundary(doc);
             if (boundary.Count == 0) return planeInfos;
 
-            double angleRadians = angleDegrees * Math.PI / 180.0;
-            double tanAngle = Math.Tan(angleRadians);
+            double angleRad = angleDegrees * Math.PI / 180.0;
+            double tanAngle = Math.Tan(angleRad);
             double groundLevel = GetGroundLevel(doc);
-            double baseHeightFeet = baseHeightM * MetersToFeet;
+            double baseHFeet = baseHeightM * MetersToFeet;
             double maxDepthFeet = maxDepthM * MetersToFeet;
-            double baseZ = groundLevel + baseHeightFeet;
-
+            double baseZ = groundLevel + baseHFeet;
             XYZ siteCenter = GetSiteCenter(boundary);
 
             for (int i = 0; i < boundary.Count; i++)
@@ -63,61 +40,46 @@ namespace PlanUp.Extractors
                     XYZ end = current.GetEndPoint(1);
 
                     XYZ boundaryDir = (end - start).Normalize();
-                    XYZ normal1 = new XYZ(-boundaryDir.Y, boundaryDir.X, 0);
-                    XYZ normal2 = new XYZ(boundaryDir.Y, -boundaryDir.X, 0);
-                    XYZ boundaryMid = (start + end) / 2.0;
-                    XYZ toCenter = (siteCenter - boundaryMid).Normalize();
-                    XYZ inwardNormal = (toCenter.DotProduct(normal1) > 0) ? normal1 : normal2;
+                    XYZ n1 = new XYZ(-boundaryDir.Y, boundaryDir.X, 0);
+                    XYZ n2 = new XYZ(boundaryDir.Y, -boundaryDir.X, 0);
+                    XYZ mid = (start + end) / 2.0;
+                    XYZ toCenter = (siteCenter - mid).Normalize();
+                    XYZ inward = (toCenter.DotProduct(n1) > 0) ? n1 : n2;
 
+                    // Limit depth to half the distance across the site
                     double depth = 0;
                     foreach (Curve c in boundary)
                     {
-                        XYZ p1 = c.GetEndPoint(0);
-                        XYZ p2 = c.GetEndPoint(1);
-                        double d1 = (p1 - boundaryMid).DotProduct(inwardNormal);
-                        double d2 = (p2 - boundaryMid).DotProduct(inwardNormal);
+                        double d1 = (c.GetEndPoint(0) - mid).DotProduct(inward);
+                        double d2 = (c.GetEndPoint(1) - mid).DotProduct(inward);
                         depth = Math.Max(depth, Math.Max(d1, d2));
                     }
-                    depth = Math.Min(depth, maxDepthFeet);
-                    if (depth < 1.0) depth = maxDepthFeet;
+                    depth = Math.Min(depth * 0.5, maxDepthFeet);
+                    if (depth < 1.0) depth = maxDepthFeet * 0.3;
+
+                    double topH = baseHFeet + (depth * tanAngle);
+                    double topZ = groundLevel + topH;
 
                     XYZ bottomLeft = new XYZ(start.X, start.Y, baseZ);
                     XYZ bottomRight = new XYZ(end.X, end.Y, baseZ);
-
-                    double topHeightFeet = baseHeightFeet + (depth * tanAngle);
-                    double topZ = groundLevel + topHeightFeet;
-
-                    XYZ topLeft = new XYZ(
-                        start.X + inwardNormal.X * depth,
-                        start.Y + inwardNormal.Y * depth,
-                        topZ);
-                    XYZ topRight = new XYZ(
-                        end.X + inwardNormal.X * depth,
-                        end.Y + inwardNormal.Y * depth,
-                        topZ);
+                    XYZ topLeft = new XYZ(start.X + inward.X * depth, start.Y + inward.Y * depth, topZ);
+                    XYZ topRight = new XYZ(end.X + inward.X * depth, end.Y + inward.Y * depth, topZ);
 
                     TessellatedShapeBuilder builder = new TessellatedShapeBuilder();
                     builder.OpenConnectedFaceSet(false);
-
-                    builder.AddFace(new TessellatedFace(
-                        new List<XYZ> { bottomLeft, bottomRight, topRight },
-                        ElementId.InvalidElementId));
-                    builder.AddFace(new TessellatedFace(
-                        new List<XYZ> { bottomLeft, topRight, topLeft },
-                        ElementId.InvalidElementId));
-
+                    builder.AddFace(new TessellatedFace(new List<XYZ> { bottomLeft, bottomRight, topRight }, ElementId.InvalidElementId));
+                    builder.AddFace(new TessellatedFace(new List<XYZ> { bottomLeft, topRight, topLeft }, ElementId.InvalidElementId));
                     builder.CloseConnectedFaceSet();
                     builder.Build();
 
                     TessellatedShapeBuilderResult result = builder.GetBuildResult();
-
-                    DirectShape ds = DirectShape.CreateElement(doc, DirectShapeCategoryId);
-                    ds.ApplicationId = "PlanUp";
-                    ds.ApplicationDataId = "RasanteEnvelope";
-
                     IList<GeometryObject> geomObjects = result.GetGeometricalObjects();
+
                     if (geomObjects.Count > 0)
                     {
+                        DirectShape ds = DirectShape.CreateElement(doc, DirectShapeCategoryId);
+                        ds.ApplicationId = "PlanUp";
+                        ds.ApplicationDataId = "RasanteEnvelope";
                         ds.SetShape(geomObjects);
                         ds.SetName("PlanUp Rasante Envelope");
                         planeInfos.Add(new PlaneInfo { Id = ds.Id, BoundaryIndex = i });
@@ -129,458 +91,104 @@ namespace PlanUp.Extractors
             return planeInfos;
         }
 
-        /// <summary>
-        /// Colors each rasante plane individually:
-        /// red for boundary segments with violations, green for compliant ones.
-        /// </summary>
-        public static void ApplyPerPlaneColors(
-            Document doc,
-            View view,
-            List<PlaneInfo> planes,
-            HashSet<int> violatingBoundaryIndices)
+        public static void ApplyPerPlaneColors(Document doc, View view, List<PlaneInfo> planes, HashSet<int> violatingBoundaryIndices)
         {
-            // Find solid fill pattern
             ElementId solidPatternId = ElementId.InvalidElementId;
-            FilteredElementCollector patternCollector = new FilteredElementCollector(doc)
-                .OfClass(typeof(FillPatternElement));
-
-            foreach (FillPatternElement fpe in patternCollector)
+            foreach (FillPatternElement fpe in new FilteredElementCollector(doc).OfClass(typeof(FillPatternElement)))
             {
                 FillPattern fp = fpe.GetFillPattern();
-                if (fp != null && fp.IsSolidFill)
-                {
-                    solidPatternId = fpe.Id;
-                    break;
-                }
+                if (fp != null && fp.IsSolidFill) { solidPatternId = fpe.Id; break; }
             }
 
             foreach (PlaneInfo plane in planes)
             {
                 bool isViolating = violatingBoundaryIndices.Contains(plane.BoundaryIndex);
-
                 OverrideGraphicSettings ogs = new OverrideGraphicSettings();
-                Color color = isViolating
-                    ? new Color(231, 76, 60)    // red
-                    : new Color(39, 174, 96);   // green
-
+                Color color = isViolating ? new Color(231, 76, 60) : new Color(39, 174, 96);
                 ogs.SetSurfaceForegroundPatternColor(color);
                 ogs.SetSurfaceTransparency(70);
-
-                if (solidPatternId != ElementId.InvalidElementId)
-                {
-                    ogs.SetSurfaceForegroundPatternId(solidPatternId);
-                }
-
+                if (solidPatternId != ElementId.InvalidElementId) ogs.SetSurfaceForegroundPatternId(solidPatternId);
                 view.SetElementOverrides(plane.Id, ogs);
             }
         }
 
-        /// <summary>
-        /// Creates rasante envelope surfaces with proper clipping between
-        /// adjacent boundary segments.
-        /// Must be called within a Transaction.
-        /// </summary>
-        public static List<ElementId> CreateRasanteSurfaces(
-            Document doc,
-            double angleDegrees,
-            double baseHeightM,
-            double maxDepthM = 50.0)
-        {
-            List<ElementId> createdIds = new List<ElementId>();
-
-            List<Curve> boundary = GetPropertyBoundary(doc);
-            if (boundary.Count == 0) return createdIds;
-
-            double angleRadians = angleDegrees * Math.PI / 180.0;
-            double tanAngle = Math.Tan(angleRadians);
-            double groundLevel = GetGroundLevel(doc);
-            double baseHeightFeet = baseHeightM * MetersToFeet;
-            double maxDepthFeet = maxDepthM * MetersToFeet;
-            double baseZ = groundLevel + baseHeightFeet;
-
-            XYZ siteCenter = GetSiteCenter(boundary);
-
-            // For each boundary segment, compute a clipped rasante quad
-            for (int i = 0; i < boundary.Count; i++)
-            {
-                try
-                {
-                    Curve current = boundary[i];
-                    XYZ start = current.GetEndPoint(0);
-                    XYZ end = current.GetEndPoint(1);
-
-                    // Inward normal for this segment
-                    XYZ boundaryDir = (end - start).Normalize();
-                    XYZ normal1 = new XYZ(-boundaryDir.Y, boundaryDir.X, 0);
-                    XYZ normal2 = new XYZ(boundaryDir.Y, -boundaryDir.X, 0);
-                    XYZ boundaryMid = (start + end) / 2.0;
-                    XYZ toCenter = (siteCenter - boundaryMid).Normalize();
-                    XYZ inwardNormal = (toCenter.DotProduct(normal1) > 0) ? normal1 : normal2;
-
-                    // Calculate depth: use distance to the farthest site point
-                    // projected onto the inward normal, but cap at maxDepthFeet
-                    double depth = 0;
-                    foreach (Curve c in boundary)
-                    {
-                        XYZ p1 = c.GetEndPoint(0);
-                        XYZ p2 = c.GetEndPoint(1);
-                        double d1 = (p1 - boundaryMid).DotProduct(inwardNormal);
-                        double d2 = (p2 - boundaryMid).DotProduct(inwardNormal);
-                        depth = Math.Max(depth, Math.Max(d1, d2));
-                    }
-                    depth = Math.Min(depth, maxDepthFeet);
-                    if (depth < 1.0) depth = maxDepthFeet; // fallback
-
-                    // Build the four corners of the plane
-                    XYZ bottomLeft = new XYZ(start.X, start.Y, baseZ);
-                    XYZ bottomRight = new XYZ(end.X, end.Y, baseZ);
-
-                    double topHeightFeet = baseHeightFeet + (depth * tanAngle);
-                    double topZ = groundLevel + topHeightFeet;
-
-                    XYZ topLeft = new XYZ(
-                        start.X + inwardNormal.X * depth,
-                        start.Y + inwardNormal.Y * depth,
-                        topZ);
-                    XYZ topRight = new XYZ(
-                        end.X + inwardNormal.X * depth,
-                        end.Y + inwardNormal.Y * depth,
-                        topZ);
-
-                    // Create the mesh
-                    TessellatedShapeBuilder builder = new TessellatedShapeBuilder();
-                    builder.OpenConnectedFaceSet(false);
-
-                    TessellatedFace face1 = new TessellatedFace(
-                        new List<XYZ> { bottomLeft, bottomRight, topRight },
-                        ElementId.InvalidElementId);
-                    builder.AddFace(face1);
-
-                    TessellatedFace face2 = new TessellatedFace(
-                        new List<XYZ> { bottomLeft, topRight, topLeft },
-                        ElementId.InvalidElementId);
-                    builder.AddFace(face2);
-
-                    builder.CloseConnectedFaceSet();
-                    builder.Build();
-
-                    TessellatedShapeBuilderResult result = builder.GetBuildResult();
-
-                    DirectShape ds = DirectShape.CreateElement(doc, DirectShapeCategoryId);
-                    ds.ApplicationId = "PlanUp";
-                    ds.ApplicationDataId = "RasanteEnvelope";
-
-                    IList<GeometryObject> geomObjects = result.GetGeometricalObjects();
-                    if (geomObjects.Count > 0)
-                    {
-                        ds.SetShape(geomObjects);
-                        ds.SetName("PlanUp Rasante Envelope");
-                        createdIds.Add(ds.Id);
-                    }
-                }
-                catch
-                {
-                    continue;
-                }
-            }
-
-            return createdIds;
-        }
-
-        /// <summary>
-        /// Calculates the bisector direction at a boundary vertex.
-        /// 
-        /// At each corner of the property boundary, two segments meet.
-        /// The bisector splits the angle between them, pointing inward.
-        /// This is where one rasante plane should end and the next begins,
-        /// preventing the edges from crossing.
-        /// </summary>
-        private static XYZ GetBisectorDirection(
-            List<Curve> boundary, int segmentIndex, bool atStart, XYZ siteCenter)
-        {
-            XYZ current_start = boundary[segmentIndex].GetEndPoint(0);
-            XYZ current_end = boundary[segmentIndex].GetEndPoint(1);
-            XYZ currentDir = (current_end - current_start).Normalize();
-
-            // Get the inward normal of the current segment
-            XYZ normal1 = new XYZ(-currentDir.Y, currentDir.X, 0);
-            XYZ normal2 = new XYZ(currentDir.Y, -currentDir.X, 0);
-            XYZ midPt = (current_start + current_end) / 2.0;
-            XYZ toCenter = (siteCenter - midPt).Normalize();
-            XYZ inwardNormal = (toCenter.DotProduct(normal1) > 0) ? normal1 : normal2;
-
-            // Find the adjacent segment by closest endpoint
-            XYZ vertex = atStart ? current_start : current_end;
-
-            int adjIndex = -1;
-            double closestDist = double.MaxValue;
-
-            for (int i = 0; i < boundary.Count; i++)
-            {
-                if (i == segmentIndex) continue;
-
-                XYZ s = boundary[i].GetEndPoint(0);
-                XYZ e = boundary[i].GetEndPoint(1);
-
-                double ds = new XYZ(vertex.X - s.X, vertex.Y - s.Y, 0).GetLength();
-                double de = new XYZ(vertex.X - e.X, vertex.Y - e.Y, 0).GetLength();
-                double minD = Math.Min(ds, de);
-
-                if (minD < closestDist)
-                {
-                    closestDist = minD;
-                    adjIndex = i;
-                }
-            }
-
-            // If no adjacent segment found, use the inward normal directly
-            if (adjIndex < 0) return inwardNormal;
-
-            // Get the inward normal of the adjacent segment
-            XYZ adj_start = boundary[adjIndex].GetEndPoint(0);
-            XYZ adj_end = boundary[adjIndex].GetEndPoint(1);
-            XYZ adjDir = (adj_end - adj_start).Normalize();
-
-            XYZ adjNormal1 = new XYZ(-adjDir.Y, adjDir.X, 0);
-            XYZ adjNormal2 = new XYZ(adjDir.Y, -adjDir.X, 0);
-            XYZ adjMid = (adj_start + adj_end) / 2.0;
-            XYZ adjToCenter = (siteCenter - adjMid).Normalize();
-            XYZ adjInwardNormal = (adjToCenter.DotProduct(adjNormal1) > 0) ? adjNormal1 : adjNormal2;
-
-            // Bisector = average of the two inward normals, normalized
-            XYZ bisector = (inwardNormal + adjInwardNormal);
-            double len = Math.Sqrt(bisector.X * bisector.X + bisector.Y * bisector.Y);
-
-            if (len < 1e-10) return inwardNormal; // parallel segments
-
-            return new XYZ(bisector.X / len, bisector.Y / len, 0);
-        }
-
-        /// <summary>
-        /// Highlights walls that violate the rasante by coloring them red.
-        /// Must be called within a Transaction.
-        /// </summary>
-        public static void HighlightViolatingWalls(
-            Document doc,
-            View view,
-            List<ElementId> wallIds)
+        public static void HighlightViolatingWalls(Document doc, View view, List<ElementId> wallIds)
         {
             if (wallIds.Count == 0) return;
-
             OverrideGraphicSettings ogs = new OverrideGraphicSettings();
-            Color red = new Color(231, 76, 60); // #E74C3C
-
+            Color red = new Color(231, 76, 60);
             ogs.SetSurfaceForegroundPatternColor(red);
             ogs.SetSurfaceBackgroundPatternColor(red);
             ogs.SetProjectionLineColor(red);
-
-            // Find solid fill pattern
-            FilteredElementCollector patternCollector = new FilteredElementCollector(doc)
-                .OfClass(typeof(FillPatternElement));
-
-            foreach (FillPatternElement fpe in patternCollector)
+            foreach (FillPatternElement fpe in new FilteredElementCollector(doc).OfClass(typeof(FillPatternElement)))
             {
                 FillPattern fp = fpe.GetFillPattern();
-                if (fp != null && fp.IsSolidFill)
-                {
-                    ogs.SetSurfaceForegroundPatternId(fpe.Id);
-                    ogs.SetSurfaceBackgroundPatternId(fpe.Id);
-                    break;
-                }
+                if (fp != null && fp.IsSolidFill) { ogs.SetSurfaceForegroundPatternId(fpe.Id); ogs.SetSurfaceBackgroundPatternId(fpe.Id); break; }
             }
-
-            foreach (ElementId id in wallIds)
-            {
-                view.SetElementOverrides(id, ogs);
-            }
+            foreach (ElementId id in wallIds) view.SetElementOverrides(id, ogs);
         }
 
-        /// <summary>
-        /// Clears wall color overrides set by PlanUp.
-        /// Resets all walls to default appearance.
-        /// Must be called within a Transaction.
-        /// </summary>
         public static void ClearWallHighlights(Document doc, View view)
         {
-            FilteredElementCollector wallCollector = new FilteredElementCollector(doc, view.Id)
-                .OfCategory(BuiltInCategory.OST_Walls)
-                .WhereElementIsNotElementType();
-
-            OverrideGraphicSettings defaultOgs = new OverrideGraphicSettings();
-
-            foreach (Element wall in wallCollector)
-            {
-                view.SetElementOverrides(wall.Id, defaultOgs);
-            }
+            var wc = new FilteredElementCollector(doc, view.Id).OfCategory(BuiltInCategory.OST_Walls).WhereElementIsNotElementType();
+            OverrideGraphicSettings def = new OverrideGraphicSettings();
+            foreach (Element w in wc) view.SetElementOverrides(w.Id, def);
         }
 
-        /// <summary>
-        /// Applies color override to rasante surfaces.
-        /// </summary>
-        public static void ApplyColorOverrides(
-            Document doc,
-            View view,
-            List<ElementId> rasanteIds,
-            bool hasViolations)
-        {
-            OverrideGraphicSettings ogs = new OverrideGraphicSettings();
-
-            Color surfaceColor = hasViolations
-                ? new Color(231, 76, 60)   // red
-                : new Color(39, 174, 96);  // green
-
-            ogs.SetSurfaceForegroundPatternColor(surfaceColor);
-            ogs.SetSurfaceTransparency(70);
-
-            FilteredElementCollector patternCollector = new FilteredElementCollector(doc)
-                .OfClass(typeof(FillPatternElement));
-
-            foreach (FillPatternElement fpe in patternCollector)
-            {
-                FillPattern fp = fpe.GetFillPattern();
-                if (fp != null && fp.IsSolidFill)
-                {
-                    ogs.SetSurfaceForegroundPatternId(fpe.Id);
-                    break;
-                }
-            }
-
-            foreach (ElementId id in rasanteIds)
-            {
-                view.SetElementOverrides(id, ogs);
-            }
-        }
-
-        /// <summary>
-        /// Removes all previously created rasante surfaces.
-        /// </summary>
         public static void ClearPreviousRasante(Document doc)
         {
-            FilteredElementCollector collector = new FilteredElementCollector(doc)
-                .OfClass(typeof(DirectShape));
-
             List<ElementId> toDelete = new List<ElementId>();
-
-            foreach (DirectShape ds in collector)
+            foreach (DirectShape ds in new FilteredElementCollector(doc).OfClass(typeof(DirectShape)))
             {
-                if (ds.Name == "PlanUp Rasante Envelope")
-                {
-                    toDelete.Add(ds.Id);
-                }
+                if (ds.Name == "PlanUp Rasante Envelope") toDelete.Add(ds.Id);
             }
-
-            if (toDelete.Count > 0)
-            {
-                doc.Delete(toDelete);
-            }
+            if (toDelete.Count > 0) doc.Delete(toDelete);
         }
 
         private static XYZ GetSiteCenter(List<Curve> boundary)
         {
-            double sumX = 0, sumY = 0;
-            int count = 0;
-
-            foreach (Curve curve in boundary)
-            {
-                XYZ mid = (curve.GetEndPoint(0) + curve.GetEndPoint(1)) / 2.0;
-                sumX += mid.X;
-                sumY += mid.Y;
-                count++;
-            }
-
-            if (count == 0) return XYZ.Zero;
-            return new XYZ(sumX / count, sumY / count, 0);
+            double sx = 0, sy = 0; int n = 0;
+            foreach (Curve c in boundary) { XYZ m = (c.GetEndPoint(0) + c.GetEndPoint(1)) / 2.0; sx += m.X; sy += m.Y; n++; }
+            return n == 0 ? XYZ.Zero : new XYZ(sx / n, sy / n, 0);
         }
 
         private static double GetGroundLevel(Document doc)
         {
-            FilteredElementCollector levelCollector = new FilteredElementCollector(doc)
-                .OfClass(typeof(Level));
-
-            double closestToZero = 0;
-            double smallestDifference = double.MaxValue;
-
-            foreach (Level level in levelCollector)
-            {
-                double difference = Math.Abs(level.Elevation);
-                if (difference < smallestDifference)
-                {
-                    smallestDifference = difference;
-                    closestToZero = level.Elevation;
-                }
-            }
-
-            return closestToZero;
+            double closest = 0; double smallest = double.MaxValue;
+            foreach (Level l in new FilteredElementCollector(doc).OfClass(typeof(Level)))
+            { double d = Math.Abs(l.Elevation); if (d < smallest) { smallest = d; closest = l.Elevation; } }
+            return closest;
         }
 
         private static List<Curve> GetPropertyBoundary(Document doc)
         {
             List<Curve> curves = new List<Curve>();
-
-            BuiltInCategory[] possibleCategories = new BuiltInCategory[]
-            {
-                BuiltInCategory.OST_SitePropertyLineSegment,
-                BuiltInCategory.OST_SiteProperty,
-                BuiltInCategory.OST_Site
-            };
-
-            foreach (BuiltInCategory category in possibleCategories)
+            BuiltInCategory[] cats = { BuiltInCategory.OST_SitePropertyLineSegment, BuiltInCategory.OST_SiteProperty, BuiltInCategory.OST_Site };
+            foreach (BuiltInCategory cat in cats)
             {
                 try
                 {
-                    FilteredElementCollector collector = new FilteredElementCollector(doc)
-                        .OfCategory(category)
-                        .WhereElementIsNotElementType();
-
-                    foreach (Element element in collector)
-                    {
-                        Options geomOptions = new Options();
-                        GeometryElement geomElement = element.get_Geometry(geomOptions);
-                        if (geomElement == null) continue;
-
-                        ExtractCurvesFromGeometry(geomElement, curves);
-                    }
-
+                    foreach (Element e in new FilteredElementCollector(doc).OfCategory(cat).WhereElementIsNotElementType())
+                    { Options o = new Options(); GeometryElement ge = e.get_Geometry(o); if (ge != null) ExtractCurves(ge, curves); }
                     if (curves.Count > 0) return curves;
                 }
                 catch { }
             }
-
             try
             {
-                FilteredElementCollector classCollector = new FilteredElementCollector(doc)
-                    .OfClass(typeof(PropertyLine));
-
-                foreach (Element element in classCollector)
-                {
-                    Options geomOptions = new Options();
-                    GeometryElement geomElement = element.get_Geometry(geomOptions);
-                    if (geomElement == null) continue;
-
-                    ExtractCurvesFromGeometry(geomElement, curves);
-                }
+                foreach (Element e in new FilteredElementCollector(doc).OfClass(typeof(PropertyLine)))
+                { Options o = new Options(); GeometryElement ge = e.get_Geometry(o); if (ge != null) ExtractCurves(ge, curves); }
             }
             catch { }
-
             return curves;
         }
 
-        private static void ExtractCurvesFromGeometry(GeometryElement geomElement, List<Curve> curves)
+        private static void ExtractCurves(GeometryElement ge, List<Curve> curves)
         {
-            foreach (GeometryObject geomObj in geomElement)
+            foreach (GeometryObject go in ge)
             {
-                if (geomObj is Curve curve)
-                {
-                    curves.Add(curve);
-                }
-                else if (geomObj is GeometryInstance geomInstance)
-                {
-                    GeometryElement instanceGeom = geomInstance.GetInstanceGeometry();
-                    if (instanceGeom != null)
-                    {
-                        ExtractCurvesFromGeometry(instanceGeom, curves);
-                    }
-                }
+                if (go is Curve c) curves.Add(c);
+                else if (go is GeometryInstance gi) { GeometryElement ig = gi.GetInstanceGeometry(); if (ig != null) ExtractCurves(ig, curves); }
             }
         }
     }
